@@ -1,5 +1,10 @@
 // ─────────────────────────────────────────────────────────────
-//  GLSL: every shader used by the intro lives here
+//  GLSL: every shader used by the intro lives here.
+//  Conventions:
+//    · "U" uniforms (time, core, monoliths, fog…) are shared objects,
+//      spread into each material so one write updates every shader.
+//    · every material is additive-where-possible: no lights, no shadows,
+//      the whole lighting model is analytic and art-directed.
 // ─────────────────────────────────────────────────────────────
 
 export const noiseChunk = /* glsl */ `
@@ -31,7 +36,7 @@ float fbm3(vec3 p){
 }
 `;
 
-// Shared lighting / fog block for all "golden metal" fragment shaders
+// Shared lighting / fog / atmosphere block for every "golden metal" fragment shader
 export const commonFrag = /* glsl */ `
 uniform float uTime;
 uniform vec4 uCore;
@@ -41,60 +46,77 @@ uniform vec3 uFogColor;
 uniform float uFogDensity;
 uniform float uCharge;
 
+// Art-directed studio environment: warm horizon, dark zenith, two streaks.
 vec3 envColor(vec3 R){
   float y = R.y;
-  vec3 horizon = vec3(1.0, 0.5, 0.1) * 0.28;
-  vec3 zenith  = vec3(0.10, 0.045, 0.010);
+  vec3 horizon = vec3(1.0, 0.72, 0.38) * 0.24;
+  vec3 zenith  = vec3(0.09, 0.04, 0.009);
   vec3 c = mix(horizon, zenith, smoothstep(0.0, 0.85, y));
   c = mix(c, vec3(0.07, 0.03, 0.006), 1.0 - smoothstep(-0.5, 0.0, y));
-  c += vec3(1.0, 0.86, 0.52) * 1.3 * pow(max(dot(R, normalize(vec3(0.45, 0.65, -0.6))), 0.0), 26.0);
-  c += vec3(1.0, 0.55, 0.18) * 0.8 * pow(max(dot(R, normalize(vec3(-0.75, 0.35, 0.35))), 0.0), 14.0);
-  c += vec3(1.0, 0.75, 0.35) * 0.5 * pow(max(dot(R, normalize(vec3(0.1, 0.25, 0.95))), 0.0), 12.0);
+  c += vec3(1.0, 0.86, 0.52) * 1.35 * pow(max(dot(R, normalize(vec3(0.45, 0.65, -0.6))), 0.0), 26.0);
+  c += vec3(1.0, 0.48, 0.12) * 0.85 * pow(max(dot(R, normalize(vec3(-0.75, 0.35, 0.35))), 0.0), 14.0);
+  c += vec3(1.0, 0.60, 0.20) * 0.42 * pow(max(dot(R, normalize(vec3(0.1, 0.25, 0.95))), 0.0), 12.0);
   float strip = smoothstep(0.93, 1.0, sin(R.x * 4.0 + R.z * 3.0 + R.y * 2.0) * 0.5 + 0.5);
-  c += vec3(1.0, 0.82, 0.5) * 0.8 * strip * smoothstep(-0.1, 0.5, y);
+  c += vec3(1.0, 0.66, 0.28) * 0.62 * strip * smoothstep(-0.1, 0.5, y);
   return c;
 }
 
+// Brushed gold: GGX-ish lobe + anisotropic streak + core key light.
 vec3 goldShade(vec3 N, vec3 V, vec3 wpos, float seed){
   vec3 R = reflect(-V, N);
   float ndv = clamp(dot(N, V), 0.0, 1.0);
-  vec3 F0 = vec3(1.0, 0.74, 0.30);
-  vec3 F = F0 + (1.0 - F0) * pow(1.0 - ndv, 5.0) * 0.3;
-  vec3 col = envColor(R) * F * 0.7;
-  col *= 0.7 + 0.6 * fract(seed * 7.31);
+  vec3 F0 = vec3(1.0, 0.78, 0.36);
+  // a hot Fresnel rim is what makes gold read as metal on a big flat facet
+  vec3 F = F0 + (1.0 - F0) * pow(1.0 - ndv, 4.0) * 0.9;
 
+  vec3 col = envColor(R) * F * 0.46;
+
+  // brushed micro-structure + a slow vertical gradient, so a facet is never one tone
+  float brush = 0.55 + 0.85 * fract(seed * 7.31);
+  float streak = smoothstep(0.35, 1.0, sin(wpos.y * 9.0 + seed * 61.0) * 0.5 + 0.5);
+  col *= brush * (0.92 + 0.16 * streak);
+  col *= mix(0.55, 1.15, clamp((wpos.y + 2.0) / 22.0, 0.0, 1.0));
+
+  // key light = the energy core; the specular is the signature of polished gold
   vec3 Lc = uCore.xyz - wpos;
   float dl = length(Lc);
   vec3 L = Lc / max(dl, 0.001);
-  float att = uCore.w / (1.0 + dl * dl * 0.0025);
+  float att = uCore.w / (1.0 + dl * dl * 0.0016);
   float diff = max(dot(N, L), 0.0);
-  float spec = pow(max(dot(R, L), 0.0), 22.0);
-  col += (F0 * diff * 0.5 + vec3(1.0, 0.85, 0.55) * spec * 1.6) * att;
+  float spec = pow(max(dot(R, L), 0.0), 40.0);
+  float wide = pow(max(dot(R, L), 0.0), 4.0) * 0.16;
+  col += (F0 * diff * 0.30 + vec3(1.0, 0.84, 0.52) * (spec * 4.2 + wide)) * att * 1.35;
 
-  col += F0 * vec3(0.5, 0.3, 0.1) * 0.05 * (0.5 + 0.5 * N.y);
+  // hemisphere bounce keeps the dark sides alive, but only just
+  col += F0 * vec3(0.5, 0.3, 0.11) * 0.03 * (0.5 + 0.5 * N.y);
   return col;
 }
 
-vec3 pools(vec3 wpos){
+// Light pools thrown by the crystal screens + soft contact occlusion around them.
+vec3 pools(vec3 wpos, out float ao){
   vec3 g = vec3(0.0);
+  ao = 1.0;
   for (int i = 0; i < 10; i++) {
     vec3 d = wpos - uMono[i].xyz;
-    float dd = dot(d.xz, d.xz) + d.y * d.y * 0.18;
-    g += uMono[i].w * exp(-dd / 85.0);
+    float dd = dot(d.xz, d.xz) + d.y * d.y * 0.16;
+    g += uMono[i].w * exp(-dd / 78.0);
+    // cheap vertical contact shadow right under each monolith
+    float r = length(d.xz);
+    ao *= 1.0 - 0.55 * uMono[i].w * exp(-r * r / 42.0) * exp(-max(d.y, 0.0) * 0.22);
   }
-  return g * vec3(1.0, 0.62, 0.18) * 1.3;
+  return g * vec3(1.0, 0.62, 0.18) * 1.35;
 }
 
 vec3 applyFog(vec3 col, vec3 wpos){
   float d = length(wpos - cameraPosition);
   float f = 1.0 - exp(-d * d * uFogDensity * uFogDensity);
-  float hf = exp(-max(wpos.y, 0.0) * 0.025);
-  f = clamp(f * (0.55 + 0.45 * hf), 0.0, 1.0);
+  float hf = exp(-max(wpos.y, 0.0) * 0.024);
+  f = clamp(f * (0.5 + 0.5 * hf), 0.0, 1.0);
   return mix(col, uFogColor, f);
 }
 `;
 
-// ───────────────────────── terrain / pillars / monoliths
+// ───────────────────────── terrain / pillars / crystal bodies
 export const goldVert = /* glsl */ `
 attribute vec3 aBary;
 attribute float aSeed;
@@ -184,44 +206,55 @@ void main(){
   float ndv = clamp(dot(N, V), 0.0, 1.0);
 
   vec3 col = goldShade(N, V, vWPos, vSeed);
-  col += pools(vWPos) * vec3(0.4, 0.36, 0.32);
+  float ao;
+  vec3 pool = pools(vWPos, ao);
+  col = col * mix(1.0, ao, 0.6) + pool * vec3(0.42, 0.29, 0.15) * ao * 0.55;
 
   float dist = length(vWPos.xz);
   float pulse = pow(0.5 + 0.5 * sin(dist * 0.07 - uTime * 1.8), 8.0);
-  float eI = 1.0 + pulse * 2.2;
-  vec3 edgeCol = vec3(1.0, 0.74, 0.26);
+  float eI = 0.22 + pulse * 0.34;
+  vec3 edgeCol = vec3(1.0, 0.82, 0.44);
 
   #ifdef TERRAIN
-    eI += (1.0 - vBuild) * 9.0;
-    eI *= 1.0 + uCharge * 0.8;
+    eI += (1.0 - vBuild) * 6.0;
+    eI *= 0.42 + uCharge * 0.5;
+    // a slow tonal drift across the plaza keeps the facets from reading as tiles
+    col *= 0.62 + 0.55 * fract(vSeed * 3.77);
+    // only a small share of the facets catch a lit edge, and faintly — reads as
+    // polished shards catching the sky, never as a wireframe mesh
+    eI *= smoothstep(0.55, 0.93, fract(vSeed * 13.7));
   #endif
 
   #ifdef PILLAR
+    eI *= 0.65;
     float hn = clamp(vLocalY / max(vH, 1.0), 0.0, 1.0);
     col += vec3(1.0, 0.6, 0.16) * (pow(1.0 - hn, 3.0) * 0.6 + pow(hn, 3.0) * 0.35) * (0.2 + 0.4 * fract(vSeed * 5.1));
-    eI += (1.0 - vBuild) * 6.0;
+    eI += (1.0 - vBuild) * 5.0;
+    eI *= smoothstep(0.35, 0.8, fract(vSeed * 9.3));
   #endif
 
   #ifdef MONO
     float hn = clamp(vLocal.y / uHeight, 0.0, 1.0);
-    float rim = pow(1.0 - ndv, 1.6);
-    vec3 glow = vec3(1.0, 0.62, 0.18) * (pow(1.0 - hn, 2.0) * 1.0 + smoothstep(0.5, 1.0, hn) * 0.6);
-    col += glow * (0.15 + 0.7 * rim + 0.3 * fract(vSeed * 5.1)) * (0.7 + 0.9 * uCharge);
-    float band = smoothstep(cut - 1.8, cut, vLocal.y);
-    col += vec3(1.0, 0.86, 0.55) * band * 6.0;
-    eI = 2.6 + pulse * 2.5 + uCharge * 3.0 + band * 6.0;
+    float rim = pow(1.0 - ndv, 1.5);
+    vec3 glow = vec3(1.0, 0.58, 0.14) * (pow(1.0 - hn, 2.5) * 0.55 + smoothstep(0.6, 1.0, hn) * 0.5);
+    col += glow * (0.05 + 0.55 * rim + 0.10 * fract(vSeed * 5.1)) * (0.7 + 0.7 * uCharge);
+    // the glowing "cut line" while the crystal grows out of the ground
+    float band = smoothstep(cut - 2.0, cut, vLocal.y) * (1.0 - smoothstep(cut, cut + 0.35, vLocal.y));
+    col += vec3(1.0, 0.86, 0.55) * band * 7.0;
+    eI = 0.5 + pulse * 0.45 + uCharge * 0.8 + band * 6.0;
+    eI *= smoothstep(0.0, 0.45, fract(vSeed * 11.1));
   #endif
 
   vec3 bw = fwidth(vBary);
-  vec3 bl = smoothstep(vec3(0.0), bw * 1.4 + 1e-4, vBary);
+  vec3 bl = smoothstep(vec3(0.0), bw * 1.35 + 1e-4, vBary);
   float line = 1.0 - min(bl.x, min(bl.y, bl.z));
-  vec3 bh = smoothstep(vec3(0.0), bw * 7.0 + 1e-4, vBary);
+  vec3 bh = smoothstep(vec3(0.0), bw * 6.5 + 1e-4, vBary);
   float halo = 1.0 - min(bh.x, min(bh.y, bh.z));
   halo *= halo;
   float pxs = max(bw.x, max(bw.y, bw.z));
   float lodFade = 1.0 - smoothstep(0.05, 0.22, pxs);
 
-  col += edgeCol * (line * eI + halo * eI * 0.12) * (0.12 + 0.88 * lodFade);
+  col += edgeCol * (line * eI + halo * eI * 0.1) * (0.1 + 0.9 * lodFade);
 
   col *= uExposure;
   col = applyFog(col, vWPos);
@@ -229,7 +262,7 @@ void main(){
 }
 `;
 
-// ───────────────────────── video placeholder screens
+// ───────────────────────── crystal video plates
 export const screenVert = /* glsl */ `
 varying vec2 vUv;
 varying vec3 vWPos;
@@ -252,6 +285,9 @@ uniform float uPower;
 uniform float uGrow;
 uniform float uHeight;
 uniform float uSeed;
+uniform float uIsVideo;      // 1 = real footage, 0 = generated slate
+uniform float uTexAspect;    // width / height of the source
+uniform float uPlateAspect;  // width / height of this facet
 
 ${noiseChunk}
 ${commonFrag}
@@ -263,39 +299,53 @@ void main(){
   float p = uPower;
   vec2 uv = vUv;
 
-  // glitchy horizontal jitter during power-on
+  // cover-fit: 16:9 footage fills the tall facet by cropping, never by squashing
+  float k = uPlateAspect / max(uTexAspect, 0.0001);
+  if (k < 1.0) uv.x = 0.5 + (uv.x - 0.5) * k;
+  else uv.y = 0.5 + (uv.y - 0.5) / k;
+
+  // glitchy horizontal jitter while the plate powers on
   float gl = (1.0 - smoothstep(0.55, 0.95, p)) * step(0.5, fract(sin(floor(uv.y * 40.0) + floor(uTime * 12.0)) * 43758.5))
            * (hash31(vec3(floor(uv.y * 40.0), floor(uTime * 12.0), uSeed)) - 0.5) * 0.08;
-  uv.x += gl * step(0.02, p);
+  uv.x += gl * step(0.02, p) * (1.0 - uIsVideo);
+  uv = clamp(uv, 0.001, 0.999);
 
-  vec3 tex = texture2D(uMap, uv).rgb;
+  // the plate texture is authored in sRGB — decode it before lighting the grade
+  vec3 tex = pow(texture2D(uMap, uv).rgb, vec3(2.2));
 
-  // slow "video-like" motion beneath the static placeholder
+  // slow "film-like" motion under the slate
   float flow = 0.5 + 0.5 * sin(uv.x * 5.0 + uv.y * 3.0 + uTime * 0.8 + uSeed * 9.0);
   float flow2 = 0.5 + 0.5 * sin(uv.y * 9.0 - uTime * 1.3 + uv.x * 2.0);
-  vec3 motion = vec3(1.0, 0.55, 0.14) * (flow * flow2) * 0.16;
+  vec3 motion = vec3(1.0, 0.55, 0.14) * (flow * flow2) * 0.15;
 
-  vec3 col = tex * 1.9 + motion;
+  // the generated slate is authored dark; real footage comes in at print level
+  vec3 col = tex * mix(2.6, 1.06, uIsVideo) + motion * (1.0 - uIsVideo);
 
-  // scanlines + travelling glare
+  // scanlines + a travelling glare
   col *= 0.9 + 0.1 * sin(uv.y * 520.0);
-  float glare = smoothstep(0.0, 0.5, sin((uv.x * 0.9 + uv.y * 1.1) * 3.2 - uTime * 0.7)) * 0.08;
+  float glare = smoothstep(0.0, 0.5, sin((uv.x * 0.9 + uv.y * 1.1) * 3.2 - uTime * 0.7)) * 0.07;
   col += vec3(1.0, 0.8, 0.45) * glare;
 
+  // power-on: a bright slit opens vertically, then the image blooms out of it
   float vy = abs(vUv.y - 0.5) * 2.0;
-  float openY = mix(0.012, 1.0, smoothstep(0.22, 0.78, p));
+  float openY = mix(0.012, 1.0, smoothstep(0.22, 0.82, p));
   float m = (1.0 - smoothstep(openY - 0.012, openY, vy)) * smoothstep(0.0, 0.15, p);
   float hline = (1.0 - smoothstep(0.0, 0.03, vy)) * smoothstep(0.0, 0.2, p) * (1.0 - smoothstep(0.55, 0.85, p));
 
-  vec3 dark = vec3(0.02, 0.012, 0.004);
-  col = mix(dark, col, m * smoothstep(0.25, 0.7, p));
-  col += vec3(1.0, 0.88, 0.55) * hline * 5.0;
-  col += vec3(1.0, 0.8, 0.45) * exp(-pow((p - 0.28) * 7.0, 2.0)) * 1.2 * m;
+  vec3 dark = vec3(0.016, 0.010, 0.003);
+  col = mix(dark, col, m * smoothstep(0.25, 0.72, p));
+  col += vec3(1.0, 0.88, 0.55) * hline * 6.0;
+  col += vec3(1.0, 0.8, 0.45) * exp(-pow((p - 0.28) * 7.0, 2.0)) * 1.35 * m;
 
+  // bezel: thin warm frame, brighter at the top edge
   vec2 fw = fwidth(vUv);
   vec2 e = smoothstep(vec2(0.0), fw * 1.6 + 1e-4, min(vUv, 1.0 - vUv));
   float border = 1.0 - min(e.x, e.y);
-  col += vec3(1.0, 0.78, 0.3) * border * 3.0 * smoothstep(0.0, 0.25, p);
+  col += vec3(1.0, 0.78, 0.3) * border * 2.6 * smoothstep(0.0, 0.25, p);
+
+  // inner vignette keeps the crystal's video from looking like a flat card
+  float vig = 1.0 - 0.35 * pow(length((vUv - 0.5) * vec2(1.0, 1.25)), 1.7);
+  col *= vig;
 
   col *= uExposure;
   col = applyFog(col, vWPos);
@@ -303,7 +353,7 @@ void main(){
 }
 `;
 
-// ───────────────────────── sky
+// ───────────────────────── sky dome
 export const skyVert = /* glsl */ `
 varying vec3 vDir;
 void main(){
@@ -324,20 +374,24 @@ ${noiseChunk}
 void main(){
   vec3 d = normalize(vDir);
   float h = d.y;
-  vec3 hor = uFogColor * 1.15;
+  vec3 hor = uFogColor * 1.2;
   vec3 mid = vec3(0.07, 0.03, 0.005);
-  vec3 top = vec3(0.008, 0.004, 0.001);
+  vec3 top = vec3(0.006, 0.003, 0.001);
   vec3 col = mix(hor, mid, smoothstep(0.0, 0.22, h));
   col = mix(col, top, smoothstep(0.12, 0.75, h));
   col = mix(col, uFogColor, 1.0 - smoothstep(-0.02, 0.02, h));
 
+  // burning haze drifting above the horizon
   vec3 q = vec3(d.x * 5.0, h * 9.0 - uTime * 0.35, d.z * 5.0);
   float n = fbm3(q + vec3(0.0, fbm3(q * 0.7 + uTime * 0.1) * 1.5, 0.0));
   float flame = smoothstep(0.33, 0.9, n) * exp(-max(h, 0.0) * 6.5);
-  col += vec3(1.0, 0.48, 0.09) * flame * 0.55;
+  col += vec3(1.0, 0.66, 0.34) * flame * 0.26;
 
-  float cg = pow(max(dot(d, uCoreDir), 0.0), 22.0);
-  col += vec3(1.0, 0.6, 0.2) * cg * uCoreGlow;
+  // the core bloom feeding the sky
+  float cg = pow(max(dot(d, normalize(uCoreDir)), 0.0), 18.0);
+  col += vec3(1.0, 0.72, 0.34) * cg * uCoreGlow;
+  float ring = pow(max(dot(d, normalize(uCoreDir)), 0.0), 3.0);
+  col += vec3(1.0, 0.56, 0.2) * ring * uCoreGlow * 0.06;
 
   col *= uSkyAmt * uExposure;
   gl_FragColor = vec4(col, 1.0);
@@ -376,6 +430,19 @@ void main(){
 `;
 
 // ───────────────────────── vertical beam of light
+export const beamVert = /* glsl */ `
+varying vec3 vN;
+varying vec3 vV;
+varying vec2 vUv;
+void main(){
+  vUv = uv;
+  vN = normalize(normalMatrix * normal);
+  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  vV = -mv.xyz;
+  gl_Position = projectionMatrix * mv;
+}
+`;
+
 export const beamFrag = /* glsl */ `
 varying vec3 vN;
 varying vec3 vV;
@@ -385,15 +452,15 @@ uniform float uAmt;
 ${noiseChunk}
 void main(){
   float edge = pow(abs(dot(normalize(vN), normalize(vV))), 1.4);
-  float vert = smoothstep(0.0, 0.04, vUv.y) * pow(1.0 - vUv.y, 1.25);
+  float vert = smoothstep(0.0, 0.04, vUv.y) * pow(1.0 - vUv.y, 1.35);
   float a = vUv.x * 6.2831853;
   float streak = 0.5 + 0.7 * fbm3(vec3(cos(a) * 2.5, sin(a) * 2.5, vUv.y * 3.0 - uTime * 0.8));
-  vec3 c = mix(vec3(1.0, 0.55, 0.14), vec3(1.0, 0.9, 0.6), edge) * edge * vert * streak * uAmt * 3.2;
+  vec3 c = mix(vec3(1.0, 0.55, 0.14), vec3(1.0, 0.9, 0.6), edge) * edge * vert * streak * uAmt * 3.4;
   gl_FragColor = vec4(c, 1.0);
 }
 `;
 
-// ───────────────────────── blast shell + ground ring
+// ───────────────────────── blast shell + ground rings
 export const shellFrag = /* glsl */ `
 varying vec3 vN;
 varying vec3 vV;
@@ -425,7 +492,7 @@ uniform float uTime;
 ${noiseChunk}
 void main(){
   float r = length(vP);
-  float ring = exp(-pow((r - 0.9) / 0.045, 2.0));
+  float ring = exp(-pow((r - 0.9) / 0.05, 2.0));
   float tail = smoothstep(0.9, 0.3, r) * 0.18 * smoothstep(1.0, 0.88, r);
   float ang = atan(vP.y, vP.x);
   float n = 0.6 + 0.8 * vnoise3(vec3(cos(ang) * 3.0, sin(ang) * 3.0, uTime * 0.8));
@@ -434,11 +501,12 @@ void main(){
 }
 `;
 
-// ───────────────────────── ambient embers
+// ───────────────────────── ambient embers / dust
 export const emberVert = /* glsl */ `
 attribute vec4 aRnd;
 uniform float uTime;
 uniform float uResY;
+uniform float uBT;
 varying float vA;
 void main(){
   float s = aRnd.w;
@@ -448,7 +516,10 @@ void main(){
   float h = 45.0;
   float y = mod((aRnd.y * 0.5 + 0.5) * h + uTime * (0.5 + s * 1.4), h);
   p.y = y - 3.0;
-  vA = smoothstep(0.0, 4.0, y) * (1.0 - smoothstep(h - 12.0, h, y)) * (0.45 + 0.55 * sin(uTime * (2.0 + s * 5.0) + s * 60.0));
+  float calm = smoothstep(0.0, 2.5, uBT);
+  vA = smoothstep(0.0, 4.0, y) * (1.0 - smoothstep(h - 12.0, h, y))
+     * mix(0.60 + 0.40 * sin(uTime * (2.0 + s * 5.0) + s * 60.0), 0.66, calm)
+     * mix(1.0, 0.4, calm);
   gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
   float size = 0.12 + s * 0.3;
   gl_PointSize = clamp(size * projectionMatrix[1][1] * uResY * 0.5 / max(gl_Position.w, 0.1), 1.0, 36.0);
@@ -489,7 +560,7 @@ void main(){
 }
 `;
 
-// ───────────────────────── explosion sparks
+// ───────────────────────── detonation sparks
 export const blastVert = /* glsl */ `
 attribute vec4 aDir;
 attribute vec2 aLife;
@@ -528,11 +599,11 @@ void main(){
   float a = smoothstep(1.0, 0.0, d);
   a *= a;
   vec3 c = mix(vec3(1.0, 0.45, 0.08), vec3(1.0, 0.95, 0.8), vHeat);
-  gl_FragColor = vec4(c * a * vA * 1.1, 1.0);
+  gl_FragColor = vec4(c * a * vA * 1.15, 1.0);
 }
 `;
 
-// ───────────────────────── explosion shards (flying gold debris)
+// ───────────────────────── gold debris
 export const shardVert = /* glsl */ `
 attribute vec4 aDir;
 attribute vec4 aSpin;
@@ -577,30 +648,119 @@ void main(){
 }
 `;
 
-// ───────────────────────── logo particles (camera-space)
+// ───────────────────────── polished metal (compass emblem, armillary rings)
+export const polishedVert = /* glsl */ `
+varying vec3 vWN;
+varying vec3 vWP;
+varying vec3 vLP;
+void main(){
+  vLP = position;
+  vec4 wp = modelMatrix * vec4(position, 1.0);
+  vWP = wp.xyz;
+  vWN = normalize(mat3(modelMatrix) * normal);
+  gl_Position = projectionMatrix * viewMatrix * wp;
+}
+`;
+
+export const polishedFrag = /* glsl */ `
+varying vec3 vWN;
+varying vec3 vWP;
+varying vec3 vLP;
+uniform float uForm;
+uniform float uSweep;
+uniform float uGlow;
+uniform float uSpan;
+
+${commonFrag}
+
+void main(){
+  vec3 N = normalize(vWN);
+  vec3 V = normalize(cameraPosition - vWP);
+  if (dot(N, V) < 0.0) N = -N;
+  vec3 R = reflect(-V, N);
+  float ndv = clamp(dot(N, V), 0.0, 1.0);
+
+  vec3 F0 = vec3(1.0, 0.77, 0.34);
+  vec3 F = F0 + (1.0 - F0) * pow(1.0 - ndv, 5.0);
+  vec3 col = envColor(R) * F * 1.05;
+
+  // Studio key + fill. The emblem is the hero and it now stands in a dark room,
+  // so it cannot live on reflections alone — without this it renders as a black
+  // silhouette. Warm key from upper front-left, cooler fill from behind right.
+  vec3 K1 = normalize(vec3(-0.42, 0.78, 0.62));
+  vec3 K2 = normalize(vec3(0.72, 0.15, -0.55));
+  float d1 = max(dot(N, K1), 0.0);
+  float d2 = max(dot(N, K2), 0.0);
+  float s1 = pow(max(dot(R, K1), 0.0), 48.0);
+  float s2 = pow(max(dot(R, K2), 0.0), 16.0);
+  float fres = pow(1.0 - ndv, 3.0);
+  col += F0 * (d1 * 1.15 + d2 * 0.4);
+  col += vec3(1.0, 0.93, 0.76) * s1 * 3.0;
+  col += vec3(1.0, 0.72, 0.38) * s2 * 0.55;
+  col += vec3(1.0, 0.80, 0.50) * fres * 0.35;
+
+  // three-point rig, fixed in world space so the metal keeps its form
+  vec3 L1 = normalize(vec3(-0.45, 0.75, 0.55));
+  vec3 L2 = normalize(vec3(0.85, -0.2, 0.45));
+  vec3 L3 = normalize(vec3(0.0, 0.15, -1.0));
+  float d1 = max(dot(N, L1), 0.0);
+  float s1 = pow(max(dot(R, L1), 0.0), 46.0);
+  float s2 = pow(max(dot(R, L2), 0.0), 20.0);
+  float s3 = pow(max(dot(R, L3), 0.0), 30.0);
+  col += vec3(1.0, 0.9, 0.68) * s1 * 1.75;
+  col += vec3(1.0, 0.6, 0.22) * (s2 * 0.6 + d1 * 0.26);
+  col += vec3(1.0, 0.45, 0.15) * s3 * 0.55;
+
+  // rim
+  float rim = pow(1.0 - ndv, 2.4);
+  col += vec3(1.0, 0.68, 0.28) * rim * (0.16 + 0.4 * uGlow);
+
+  // travelling light sweep across the emblem
+  float u = clamp(vLP.x / max(uSpan, 0.001) * 0.5 + 0.5, 0.0, 1.0);
+  float band = exp(-pow((u - uSweep) * 5.5, 2.0));
+  col += vec3(1.0, 0.94, 0.78) * band * (0.12 + 0.55 * (1.0 - ndv)) * uGlow;
+
+  // molten formation: white-hot, cooling into polished gold
+  float molten = 1.0 - clamp(uForm, 0.0, 1.0);
+  float veins = 0.65 + 0.35 * sin(vLP.y * 26.0 + sin(vLP.x * 11.0) * 2.0);
+  col = mix(col * 3.2 + vec3(1.0, 0.52, 0.12) * 2.6 * veins, col, uForm);
+
+  // soft shoulder: highlights roll off into gold instead of clipping to white
+  col = col / (1.0 + col * 0.34);
+  // no aerial fog on the hero: the emblem sits metres from the lens
+  col *= mix(1.0, uExposure, 0.35);
+  gl_FragColor = vec4(col, 1.0);
+}
+`;
+
+// ───────────────────────── logo particles (emblem build-up)
 export const logoPtsVert = /* glsl */ `
 attribute vec3 aStart;
 attribute vec3 aTarget;
 attribute float aSeed;
 uniform float uForm;
 uniform float uTime;
-uniform float uScale;
 uniform float uResY;
+uniform float uAura;
 varying float vTw;
 varying float vE;
 void main(){
   float f = clamp((uForm - aSeed * 0.45) / 0.55, 0.0, 1.0);
   float e = f * f * (3.0 - 2.0 * f);
-  vec3 target = vec3(aTarget.xy * uScale, aTarget.z);
-  vec3 p = mix(aStart, target, e);
+  vec3 p = mix(aStart, aTarget, e);
   float arc = sin(e * 3.14159);
-  p += vec3(sin(aSeed * 40.0 + uTime * 1.7), cos(aSeed * 31.0 + uTime * 1.4), sin(aSeed * 23.0 + uTime)) * arc * 1.2;
-  p += vec3(sin(aSeed * 90.0 + uTime * 2.0), cos(aSeed * 70.0 + uTime * 2.3), 0.0) * 0.015 * e;
-  vTw = 0.5 + 0.5 * sin(uTime * 4.0 + aSeed * 100.0);
+  p += vec3(sin(aSeed * 40.0 + uTime * 1.6), cos(aSeed * 31.0 + uTime * 1.3), sin(aSeed * 23.0 + uTime)) * arc * 1.35;
+  // a handful of embers keep orbiting the finished emblem
+  float orbit = uAura * step(0.72, aSeed);
+  float oa = uTime * (0.25 + aSeed * 0.5) + aSeed * 30.0;
+  p += orbit * vec3(cos(oa) * 0.35, sin(oa * 1.3) * 0.25, sin(oa) * 0.35);
+  // once the emblem is solid, everything that is not an orbiting ember is retired
+  float keep = mix(1.0, step(0.72, aSeed), uAura);
+  vTw = mix(0.5 + 0.5 * sin(uTime * 4.0 + aSeed * 100.0), 0.5, uAura * 0.85);
   vE = e;
   vec4 mv = modelViewMatrix * vec4(p, 1.0);
   gl_Position = projectionMatrix * mv;
-  float size = (0.035 + aSeed * 0.05) * mix(2.2, 1.0, e);
+  float size = (0.03 + aSeed * 0.045) * mix(2.4, 1.0, e) * keep;
   gl_PointSize = clamp(size * projectionMatrix[1][1] * uResY * 0.5 / max(-mv.z, 0.1), 1.0, 18.0);
 }
 `;
@@ -614,11 +774,50 @@ void main(){
   float a = smoothstep(1.0, 0.0, d);
   a *= a;
   vec3 c = mix(vec3(1.0, 0.5, 0.12), vec3(1.0, 0.93, 0.72), 0.35 + 0.65 * vTw);
-  gl_FragColor = vec4(c * a * uAmt * mix(2.4, 1.6, vE), 1.0);
+  gl_FragColor = vec4(c * a * uAmt * mix(2.6, 1.4, vE), 1.0);
 }
 `;
 
-// ───────────────────────── final grade pass
+// ───────────────────────── post: volumetric light shafts toward the core
+export const shaftsVert = /* glsl */ `
+varying vec2 vUv;
+void main(){
+  vUv = uv;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}
+`;
+
+export const shaftsFrag = /* glsl */ `
+uniform sampler2D tDiffuse;
+uniform vec2 uCenter;
+uniform float uAmt;
+uniform float uDensity;
+uniform float uDecay;
+varying vec2 vUv;
+void main(){
+  vec3 base = texture2D(tDiffuse, vUv).rgb;
+  if (uAmt <= 0.001) {
+    gl_FragColor = vec4(base, 1.0);
+    return;
+  }
+  vec2 delta = (vUv - uCenter) * uDensity / 16.0;
+  vec2 uv = vUv;
+  vec3 acc = vec3(0.0);
+  float w = 1.0;
+  float wsum = 0.0;
+  for (int i = 0; i < 16; i++) {
+    uv -= delta * 0.75;
+    vec3 s = texture2D(tDiffuse, uv).rgb;
+    acc += max(s - vec3(0.85), vec3(0.0)) * w;
+    wsum += w;
+    w *= uDecay;
+  }
+  acc /= max(wsum, 0.0001);
+  gl_FragColor = vec4(base + acc * uAmt * vec3(1.0, 0.64, 0.32), 1.0);
+}
+`;
+
+// ───────────────────────── final grade
 export const finalVert = /* glsl */ `
 varying vec2 vUv;
 void main(){
@@ -635,6 +834,8 @@ uniform float uFade;
 uniform float uAspect;
 uniform float uAberr;
 uniform float uStreak;
+uniform float uGrain;
+uniform float uVignette;
 varying vec2 vUv;
 
 float h12(vec2 p){
@@ -654,33 +855,45 @@ void main(){
   vec2 c = vUv - 0.5;
   vec2 ca = c * vec2(uAspect, 1.0);
   float r2 = dot(ca, ca);
-  float ab = uAberr * (0.003 + r2 * 0.016);
+  float ab = uAberr * (0.0028 + r2 * 0.013);
 
   vec3 col;
   col.r = texture2D(tDiffuse, vUv + c * ab * 2.0).r;
   col.g = texture2D(tDiffuse, vUv).g;
   col.b = texture2D(tDiffuse, vUv - c * ab * 2.0).b;
 
-  // anamorphic horizontal streak from the hottest highlights
-  vec3 st = vec3(0.0);
-  for (int i = -14; i <= 14; i++) {
-    float fi = float(i);
-    float w = exp(-abs(fi) * 0.22);
-    vec3 s = texture2D(tDiffuse, vUv + vec2(fi * 0.010, 0.0)).rgb;
-    st += max(s - vec3(1.6), vec3(0.0)) * w;
+  // anamorphic streak out of the hottest highlights
+  if (uStreak > 0.01) {
+    vec3 st = vec3(0.0);
+    for (int i = -6; i <= 6; i++) {
+      float fi = float(i);
+      float w = exp(-abs(fi) * 0.30);
+      vec3 s = texture2D(tDiffuse, vUv + vec2(fi * 0.009, 0.0)).rgb;
+      st += max(s - vec3(1.4), vec3(0.0)) * w;
+    }
+    col += st * vec3(1.0, 0.62, 0.28) * 0.16 * uStreak;
   }
-  col += st * vec3(1.0, 0.62, 0.28) * 0.07 * uStreak;
 
-  col += uFlash * vec3(1.0, 0.88, 0.62) * (1.3 - length(c) * 0.9);
+  col += uFlash * vec3(1.0, 0.9, 0.66) * (1.35 - length(c) * 0.9);
 
-  vec3 m = aces(col * 0.88);
-  m = pow(m, vec3(0.95, 1.0, 1.09));
+  vec3 m = aces(col * 0.72);
 
-  float v = smoothstep(0.30, 1.0, length(ca * 1.25));
-  m *= 1.0 - 0.6 * v;
+  // Gold grade (linear). Lemon (224,196,106) lands on amber gold (~207,166,60)
+  // while the white-hot core keeps a warm edge instead of going pure white.
+  m *= vec3(1.0, 0.93, 0.82);
 
-  float g = h12(vUv * 1500.0 + fract(uTime) * 91.0) - 0.5;
-  m += g * 0.02;
+  // gentle S-curve + a real black point — the haze was lifting everything into milk
+  m = m * m * (3.0 - 2.0 * m) * 0.5 + m * 0.5;
+  m = clamp(max(m - 0.018, 0.0) / 0.982, 0.0, 1.0);
+
+  // gold reads as gold only when it is saturated; the old grade washed it out
+  float luma = dot(m, vec3(0.2126, 0.7152, 0.0722));
+  m = clamp(mix(vec3(luma), m, 1.14), 0.0, 1.0);
+
+  m = pow(m, vec3(0.95, 1.0, 1.08));
+
+  float v = smoothstep(0.28, 1.05, length(ca * 1.22));
+  m *= 1.0 - uVignette * v;
 
   m *= uFade;
   m = pow(max(m, 0.0), vec3(1.0 / 2.2));

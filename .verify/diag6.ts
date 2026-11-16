@@ -1,0 +1,34 @@
+import * as THREE from "three";
+import { buildCompassEmblem } from "../src/intro/logo3d";
+import { CameraRig } from "../src/intro/camera";
+import { buildMonoliths } from "../src/intro/world";
+import { CORE_Y, TL } from "../src/intro/config";
+import { goldFrag, goldVert } from "../src/intro/shaders";
+const mat = new THREE.ShaderMaterial({ vertexShader: goldVert, fragmentShader: goldFrag, uniforms: { uTime:{value:0}, uExposure:{value:0.66}, uSweep:{value:0}, uGlow:{value:1}, uSpan:{value:2}, uForm:{value:1} } });
+const U: any = { uTime:{value:0}, uCore:{value:new THREE.Vector4(0,CORE_Y,0,1)}, uCorePos:{value:new THREE.Vector3()}, uMono:{value:Array.from({length:10},()=>new THREE.Vector4())}, uExposure:{value:1}, uFogColor:{value:new THREE.Color()}, uFogDensity:{value:0.006}, uCharge:{value:0}, uWaveC:{value:new THREE.Vector2()}, uWaveR:{value:0}, uWaveW:{value:40}, uShockR:{value:0}, uShockW:{value:1}, uShockAmp:{value:0}, uResY:{value:1080}, uBT:{value:-1} };
+const monos = buildMonoliths(U, 4);
+const rig = new CameraRig(monos.map(m=>({x:m.base.x,z:m.base.z,r:6})));
+const pose = rig.sample(TL.END);
+const cam = new THREE.PerspectiveCamera(pose.fov, 16/9, 0.1, 2000);
+cam.position.copy(pose.pos); cam.up.set(0,1,0); cam.lookAt(pose.target); cam.rotateZ(pose.roll);
+cam.updateMatrixWorld(true); cam.updateProjectionMatrix();
+const em = buildCompassEmblem(mat);
+em.group.position.set(0, CORE_Y + 0.35, 0);
+em.group.scale.setScalar(0.94);
+em.group.lookAt(pose.pos); em.group.rotateY(0.1); em.group.rotateX(0.04);
+em.group.updateMatrixWorld(true);
+const bb = new THREE.Box3().setFromObject(em.group);
+console.log("emblem size", bb.getSize(new THREE.Vector3()).toArray().map(n=>n.toFixed(2)));
+const corners: THREE.Vector3[] = [];
+for (const x of [bb.min.x, bb.max.x]) for (const y of [bb.min.y, bb.max.y]) for (const z of [bb.min.z, bb.max.z]) corners.push(new THREE.Vector3(x,y,z).project(cam));
+// convert NDC y to "percent from top of canvas"
+const top = (p: THREE.Vector3) => ((1 - p.y) / 2 * 100);
+const yTop = Math.min(...corners.map(top));
+const yBot = Math.max(...corners.map(top));
+const xL = Math.min(...corners.map(p=>p.x));
+const xR = Math.max(...corners.map(p=>p.x));
+console.log(`emblem on screen: y ${yTop.toFixed(1)}% .. ${yBot.toFixed(1)}%  (height ${(yBot-yTop).toFixed(1)}%)`);
+console.log(`emblem on screen: x ${(xL*50+50).toFixed(1)}% .. ${(xR*50+50).toFixed(1)}%`);
+// 2.39:1 safe band for a 1366x860 window
+const H = 860, W = 1366; const bar = Math.max(0, (H - W/2.39)/2);
+console.log(`letterbox bar ${bar.toFixed(0)}px = ${(bar/H*100).toFixed(1)}% → safe band 16.8%..83.2%`);
