@@ -47,6 +47,7 @@ export default function App() {
   const [showHint, setShowHint] = useState(true);
   const [dropActive, setDropActive] = useState(false);
   const [loadedClips, setLoadedClips] = useState(0);
+  const [driveMsg, setDriveMsg] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const urls = useRef<string[]>([]);
 
@@ -197,6 +198,49 @@ export default function App() {
     });
     setLoadedClips(urls.current.length);
     setShowHint(false);
+  }, []);
+
+  /**
+   * Try to pull the ten clips straight out of the Drive folder, in the browser.
+   * A plain `fetch` preflight tells us whether Drive hands out CORS headers; when
+   * it does, the bytes come back as a blob and the plate gets a same-origin URL,
+   * so the WebGL texture is never tainted. When it does not, nothing breaks —
+   * the slates stay and we say so.
+   */
+  const loadFromDrive = useCallback(async () => {
+    const s = sceneRef.current;
+    if (!s) return;
+    let ok = 0;
+    let reason = "";
+    for (let i = 0; i < VIDEO_CLIPS.length && !reason; i++) {
+      setDriveMsg(`Drive ${i + 1}/${VIDEO_CLIPS.length}…`);
+      const id = VIDEO_CLIPS[i].driveId;
+      const url = `https://drive.usercontent.google.com/download?id=${id}&export=download&confirm=t`;
+      try {
+        const res = await fetch(url, { mode: "cors", credentials: "omit" });
+        const type = res.headers.get("content-type") ?? "";
+        if (!res.ok) {
+          reason = `Drive ответил ${res.status}`;
+          break;
+        }
+        if (!type.startsWith("video/")) {
+          reason = "файл не отдаётся публично (пришла HTML-страница)";
+          break;
+        }
+        const blob = await res.blob();
+        if (blob.size < 1024) {
+          reason = "пустой ответ";
+          break;
+        }
+        s.setVideo(i, URL.createObjectURL(blob));
+        ok++;
+      } catch {
+        reason = "Drive не отдаёт CORS-заголовки — браузер блокирует чтение";
+      }
+    }
+    setLoadedClips((n) => Math.max(n, ok));
+    setDriveMsg(reason ? `${reason}. Перетащи файлы вручную.` : `Drive: ${ok}/${VIDEO_CLIPS.length}`);
+    if (ok) setShowHint(false);
   }, []);
 
   useEffect(() => {
@@ -440,6 +484,13 @@ export default function App() {
           {playing ? "Pause" : "Play"}
         </button>
         <button
+          onClick={() => void loadFromDrive()}
+          className="cursor-pointer rounded-full border border-amber-200/15 px-3 py-1.5 text-amber-100/45 backdrop-blur-sm transition hover:border-amber-200/50 hover:bg-amber-200/5 hover:text-amber-100"
+          title="Подтянуть десять роликов прямо из папки Drive circle/video"
+        >
+          ⤓ Drive
+        </button>
+        <button
           onClick={() => fileRef.current?.click()}
           className="cursor-pointer rounded-full border border-amber-200/15 px-3 py-1.5 text-amber-100/45 backdrop-blur-sm transition hover:border-amber-200/50 hover:bg-amber-200/5 hover:text-amber-100"
           title="Подставить свои ролики: 10 файлов — по одному на кристалл"
@@ -525,6 +576,12 @@ export default function App() {
           </span>
         </div>
       </div>
+
+      {driveMsg && (
+        <div className="pointer-events-none absolute bottom-24 left-5 z-40 max-w-md font-mono text-[10px] leading-relaxed tracking-[0.14em] text-amber-100/55">
+          {driveMsg}
+        </div>
+      )}
 
       <div
         ref={hintRef}
