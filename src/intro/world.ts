@@ -635,7 +635,7 @@ export function buildArmillary(material: THREE.ShaderMaterial) {
   const group = new THREE.Group();
   const rings: THREE.Mesh[] = [];
   const radii = [7.6, 9.4, 11.2, 13.0];
-  const tubes = [0.075, 0.062, 0.052, 0.044];
+  const tubes = [0.125, 0.105, 0.09, 0.075];
   // spreads of tilt: the two inner rings lean hard, the outer pair barely
   const tilts: [number, number, number][] = [
     [1.15, 0.5, 0.72],

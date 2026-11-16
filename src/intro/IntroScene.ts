@@ -848,7 +848,7 @@ export class IntroScene {
         ring.scale.setScalar(1 - 0.26 * align);
       });
       this.armillaryMat.uniforms.uGlow.value =
-        0.42 + 0.45 * charge + 0.8 * implode + (after ? 1.4 * Math.exp(-tb * 2.2) : 0);
+        1.05 + 0.7 * charge + 1.0 * implode + (after ? 1.4 * Math.exp(-tb * 2.2) : 0);
       // get the rings out of the camera's way before the dive through them
       const expand = after
         ? 1.35 + tb * 15
