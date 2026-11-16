@@ -766,8 +766,10 @@ export class IntroScene {
         const camDist = this.camera.position.distanceTo(this.shells[i].position);
         const sc = Math.min(6.5 + 105 * (1 - Math.exp(-speed * tt)), camDist * 0.86);
         this.shells[i].scale.setScalar(Math.max(0.01, sc));
+        // ramp in over ~5 frames: switching from 0 to full brightness in a single
+        // frame measured as a 900% jump and read as a flicker
         this.shellMats[i].uniforms.uAmt.value =
-          (i === 0 ? 2.4 : 1.1) * Math.exp(-tt * (i === 0 ? 3.1 : 2.1));
+          (i === 0 ? 2.4 : 1.1) * smoothstep(0.0, 0.09, tt) * Math.exp(-tt * (i === 0 ? 3.1 : 2.1));
       }
     }
     // ── ground rings
