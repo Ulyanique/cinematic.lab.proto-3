@@ -738,14 +738,14 @@ export class IntroScene {
       this.shells[i].visible = vis;
       if (vis) {
         const speed = i === 0 ? 2.7 : 1.9;
-        const sc = Math.max(0.01, 105 * (1 - Math.exp(-speed * tt)));
-        this.shells[i].scale.setScalar(sc);
-        // fading by camera distance keeps the bubble readable from the outside and
-        // stops it from wrapping the lens in additive white as it grows past us
+        // Grow the fireball, but stop it just short of the lens: fading it by
+        // camera distance (the previous attempt) scaled it past the camera within
+        // one frame, so the shell was always invisible and the blast read black.
         const camDist = this.camera.position.distanceTo(this.shells[i].position);
-        const outside = 1 - smoothstep(camDist * 0.5, camDist * 0.92, sc);
+        const sc = Math.min(105 * (1 - Math.exp(-speed * tt)), camDist * 0.86);
+        this.shells[i].scale.setScalar(Math.max(0.01, sc));
         this.shellMats[i].uniforms.uAmt.value =
-          (i === 0 ? 2.4 : 1.1) * Math.exp(-tt * (i === 0 ? 3.1 : 2.1)) * outside;
+          (i === 0 ? 2.4 : 1.1) * Math.exp(-tt * (i === 0 ? 3.1 : 2.1));
       }
     }
     // ── ground rings
