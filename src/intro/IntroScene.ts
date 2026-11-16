@@ -705,9 +705,9 @@ export class IntroScene {
 
     // ── core
     const seedGlow = smoothstep(0.3, 2.0, t);
-    const coreI = after
-      ? 0.3 + 70 * Math.exp(-tb * 3.2)
-      : 0.3 * seedGlow + 1.5 * charge + 9 * implode * implode;
+    const corePre = 0.3 * seedGlow + 1.5 * charge + 9 * implode * implode;
+    const corePost = 0.3 + 42 * Math.exp(-tb * 3.4);
+    const coreI = corePre + (corePost - corePre) * bt;
     (U.uCore.value as THREE.Vector4).w = coreI;
 
     const pulse = 1 + 0.06 * Math.sin(t * 6 * (1 + charge * 3));
