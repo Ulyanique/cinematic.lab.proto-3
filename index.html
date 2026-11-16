@@ -11,10 +11,62 @@
     />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>CIRCINUS — Golden Monolith Intro</title>
+    <script>
+      // Boot watchdog: a black screen must say why it is black.
+      (function () {
+        var shown = false;
+        function panel(title, detail) {
+          if (shown) return;
+          shown = true;
+          var d = document.createElement("div");
+          d.style.cssText =
+            "position:fixed;inset:0;z-index:99999;background:#0a0603;color:#f3cd84;" +
+            "font:300 12px/1.9 ui-monospace,SFMono-Regular,Menlo,monospace;" +
+            "padding:34px 38px;letter-spacing:.1em;white-space:pre-wrap;overflow:auto";
+          d.textContent = title + (detail ? "\n\n" + detail : "");
+          (document.body || document.documentElement).appendChild(d);
+        }
+        window.addEventListener(
+          "error",
+          function (e) {
+            var t = e.target;
+            if (t && (t.tagName === "SCRIPT" || t.tagName === "LINK")) {
+              panel("НЕ ЗАГРУЗИЛСЯ РЕСУРС", (t.src || t.href) + "\n\nОбнови страницу: Cmd/Ctrl+Shift+R");
+            } else if (e.message) {
+              panel("ОШИБКА В СЦЕНЕ", e.message + (e.filename ? "\n" + e.filename + ":" + e.lineno : ""));
+            }
+          },
+          true
+        );
+        window.addEventListener("unhandledrejection", function (e) {
+          var r = e.reason;
+          panel("ОШИБКА В СЦЕНЕ", String((r && (r.stack || r.message)) || r));
+        });
+        try {
+          var c = document.createElement("canvas");
+          if (!(c.getContext("webgl2") || c.getContext("webgl"))) {
+            panel("WEBGL НЕДОСТУПЕН", "Браузер не выдал контекст. Включи аппаратное ускорение или открой в Chrome / Firefox.");
+          }
+        } catch (err) {
+          panel("WEBGL НЕДОСТУПЕН", String(err));
+        }
+        setTimeout(function () {
+          var r = document.getElementById("root");
+          if (r && r.childElementCount === 0 && !shown) {
+            panel("СЦЕНА НЕ ЗАПУСТИЛАСЬ", "Модули не догрузились (сеть или прокси). Обнови страницу: Cmd/Ctrl+Shift+R");
+          }
+        }, 6000);
+      })();
+    </script>
     <style>
       html,
       body {
-        background: #000;
+        background: #0a0603;
+      }
+      /* so a plain black frame can be told apart from "nothing loaded" */
+      body {
+        background:
+          radial-gradient(120% 90% at 50% 42%, #1a0f06 0%, #0a0603 62%, #060402 100%);
       }
     </style>
   </head>

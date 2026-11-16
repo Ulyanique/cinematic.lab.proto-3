@@ -21,4 +21,10 @@ export default defineConfig({
     // Preview environments (Arena / E2B) proxy the app under a dynamic host name.
     allowedHosts: true,
   },
+  preview: {
+    host: true,
+    allowedHosts: true,
+    port: 5173,
+    strictPort: true,
+  },
 });
