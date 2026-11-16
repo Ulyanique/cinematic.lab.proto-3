@@ -694,8 +694,8 @@ void main(){
   float s1 = pow(max(dot(R, K1), 0.0), 48.0);
   float s2 = pow(max(dot(R, K2), 0.0), 16.0);
   float fres = pow(1.0 - ndv, 3.0);
-  col += F0 * (d1 * 0.62 + d2 * 0.20);
-  col += vec3(1.0, 0.93, 0.76) * s1 * 2.2;
+  col += F0 * (d1 * 1.15 + d2 * 0.4);
+  col += vec3(1.0, 0.93, 0.76) * s1 * 3.0;
   col += vec3(1.0, 0.72, 0.38) * s2 * 0.55;
   col += vec3(1.0, 0.80, 0.50) * fres * 0.35;
 

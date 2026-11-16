@@ -873,8 +873,8 @@ export class IntroScene {
       this.logoPts.visible = t > TL.BLAST + 0.15;
       this.logoMat.uniforms.uForm.value = smoothstep(TL.FORM_START - 0.35, TL.FORM_END, t);
       this.logoMat.uniforms.uAmt.value =
-        smoothstep(TL.BLAST + 0.2, TL.BLAST + 1.1, t) * (1 - 0.86 * smoothstep(TL.SOLID, TL.SOLID + 1.2, t));
-      this.logoMat.uniforms.uAura.value = smoothstep(TL.SOLID, TL.END, t);
+        smoothstep(TL.BLAST + 0.2, TL.BLAST + 1.1, t) * (1 - 0.94 * smoothstep(TL.SOLID, TL.SOLID + 1.4, t));
+      this.logoMat.uniforms.uAura.value = smoothstep(TL.SOLID + 0.6, TL.END, t);
     }
 
     // ── post

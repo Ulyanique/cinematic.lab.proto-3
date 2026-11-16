@@ -27,7 +27,7 @@ const fwd = new V();
 const toE = new V();
 const p = new V();
 
-for (const t of [26.0, 26.4, 27.5, 28.2, 29.0, 29.7, 30.4, 31.5]) {
+for (const t of [30.4, 33.0, 34.4, 34.5]) {
   for (let k = 0; k < 2; k++) a.update(t, 1 / 60);
   const cam = a.camera;
   cam.getWorldDirection(fwd);
