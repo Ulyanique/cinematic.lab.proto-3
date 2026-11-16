@@ -720,16 +720,21 @@ export class IntroScene {
 
     // halos: inner tight, outer soft
     // after the blast a low warm afterglow stays behind so the plaza never goes pitch black
+    // Steady afterglow between the blast and the finished logo: every other light
+    // decays exponentially there, so 28.8-30.3 s had nothing left to light it.
+    const fill = smoothstep(TL.BLAST, TL.BLAST + 0.7, t) * (1 - smoothstep(TL.SOLID - 0.3, TL.SOLID + 0.7, t));
     const hk = after ? 2.2 * Math.exp(-tb * 2.6) + 0.07 : (0.28 + 0.85 * charge + 2.6 * implode * implode) * seedGlow;
     const hs = after
       ? 13 + 95 * Math.exp(-tb * 2.8)
       : (2.5 + 8 * charge + 16 * implode * implode) * seedGlow + 0.01;
-    this.halos[0].scale.setScalar(hs);
-    (this.halos[0].material as THREE.SpriteMaterial).color.setRGB(hk, 0.82 * hk, 0.5 * hk);
+    this.halos[0].scale.setScalar(hs + 20 * fill);
+    const hkF = hk + 0.75 * fill;
+    (this.halos[0].material as THREE.SpriteMaterial).color.setRGB(hkF, 0.82 * hkF, 0.5 * hkF);
     const hk2 = after ? 1.5 * Math.exp(-tb * 1.8) + 0.045 : (0.14 + 0.42 * charge + 1.0 * implode) * seedGlow;
     const hs2 = after ? 40 + 170 * Math.exp(-tb * 2.2) : (13 + 52 * charge + 44 * implode) * seedGlow + 0.01;
     this.halos[1].scale.setScalar(hs2);
-    (this.halos[1].material as THREE.SpriteMaterial).color.setRGB(hk2, 0.6 * hk2, 0.25 * hk2);
+    const hk2F = hk2 + 0.4 * fill;
+    (this.halos[1].material as THREE.SpriteMaterial).color.setRGB(hk2F, 0.6 * hk2F, 0.25 * hk2F);
 
     // beam of light into the sky
     const beamR = 0.4 + 1.2 * charge - 0.85 * implode + (after ? 2.6 * Math.exp(-tb * 2.4) : 0);
