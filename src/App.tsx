@@ -43,7 +43,6 @@ export default function App() {
 
   const [phase, setPhase] = useState<Phase>("loading");
   const [playing, setPlaying] = useState(true);
-  const [sound, setSound] = useState(false);
   const [showHint, setShowHint] = useState(true);
   const [dropActive, setDropActive] = useState(false);
   const [loadedClips, setLoadedClips] = useState(0);
@@ -129,12 +128,6 @@ export default function App() {
     };
   }, []);
 
-  const toggleSound = useCallback(async () => {
-    const s = sceneRef.current;
-    if (!s) return;
-    const on = await s.setSound(!sound);
-    setSound(on);
-  }, [sound]);
 
   const togglePlay = useCallback(() => {
     const s = sceneRef.current;
@@ -348,14 +341,13 @@ export default function App() {
       } else if (k.toLowerCase() === "r") {
         replay();
       } else if (k.toLowerCase() === "m") {
-        void toggleSound();
       } else if (k.toLowerCase() === "p") {
         togglePlay();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [phase, replay, skip, toggleSound, togglePlay]);
+  }, [phase, replay, skip, togglePlay]);
 
   return (
     <div className="fixed inset-0 select-none overflow-hidden bg-black">
@@ -470,11 +462,8 @@ export default function App() {
       {/* controls */}
       <div className="absolute right-5 top-4 z-40 flex items-center gap-2 text-[10px] uppercase tracking-[0.28em]">
         <button
-          onClick={toggleSound}
           className="cursor-pointer rounded-full border border-amber-200/15 px-3 py-1.5 text-amber-100/45 backdrop-blur-sm transition hover:border-amber-200/50 hover:bg-amber-200/5 hover:text-amber-100"
-          aria-pressed={sound}
         >
-          {sound ? "Sound on" : "Sound off"}
         </button>
         <button
           onClick={togglePlay}
@@ -589,7 +578,7 @@ export default function App() {
         style={{ bottom: "56px", transition: "opacity 0.6s" }}
         hidden={!showHint}
       >
-        drag the timeline · space — play · ← → — seek · m — sound · r — replay
+        drag the timeline · space — play · ← → — seek · r — replay
       </div>
 
       {phase === "error" && (

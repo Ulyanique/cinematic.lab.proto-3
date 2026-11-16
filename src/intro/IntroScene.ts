@@ -7,7 +7,6 @@ import { buildPost, type PostChain } from "./post";
 import { CameraRig } from "./camera";
 
 const AXIS_Z = new THREE.Vector3(0, 0, 1);
-import { SoundDesign } from "./audio";
 import {
   beamFrag,
   beamVert,
@@ -57,7 +56,6 @@ export class IntroScene {
   t = 0;
   playing = true;
   freeze = false;
-  readonly sound = new SoundDesign();
 
   private opts: IntroOptions;
   private renderer: THREE.WebGLRenderer;
@@ -104,7 +102,7 @@ export class IntroScene {
 
   private emblem!: ReturnType<typeof buildCompassEmblem>;
   private emblemMat: THREE.ShaderMaterial;
-  private readonly fogBase = new THREE.Color(0.15, 0.062, 0.011);
+  private readonly fogBase = new THREE.Color(0.075, 0.055, 0.03);
   private emblemHalo: THREE.Mesh;
   private logoPts: THREE.Points;
   private logoMat: THREE.ShaderMaterial;
@@ -116,9 +114,6 @@ export class IntroScene {
   private tmpSpin = new THREE.Quaternion();
   private tmpDir = new THREE.Vector3();
   private now = 0;
-  private prevCam = new THREE.Vector3();
-  private prevCamValid = false;
-  private camSpeed = 0;
   private onVisibility = () => {
     if (!document.hidden) this.last = performance.now();
   };
@@ -154,7 +149,7 @@ export class IntroScene {
       uCorePos: { value: new THREE.Vector3(0, CORE_Y, 0) },
       uMono: { value: Array.from({ length: MONO_COUNT }, () => new THREE.Vector4(0, -80, 0, 0)) },
       uExposure: { value: 1 },
-      uFogColor: { value: new THREE.Color(0.15, 0.062, 0.011) },
+      uFogColor: { value: new THREE.Color(0.075, 0.055, 0.03) },
       uFogDensity: { value: 0.0058 },
       uCharge: { value: 0 },
       uWaveC: { value: new THREE.Vector2(0, 0) },
@@ -513,7 +508,6 @@ export class IntroScene {
     this.ro.observe(container);
     this.resize();
 
-    this.sound.setRiseSchedule(this.riseStart);
 
     document.addEventListener("visibilitychange", this.onVisibility);
     this.last = performance.now();
@@ -561,7 +555,6 @@ export class IntroScene {
       m.videoStarted = false;
       if (m.video) m.video.currentTime = 0;
     });
-    this.sound.update(0, { charge: 0, speed: 0, shake: 0 });
   }
 
   /**
@@ -615,15 +608,7 @@ export class IntroScene {
     this.ended = this.t >= TL.END;
   }
 
-  async setSound(on: boolean) {
-    if (on) {
-      if (!this.sound.enabled) await this.sound.enable();
-      else await this.sound.toggle();
-    } else if (this.sound.enabled) {
-      await this.sound.toggle();
-    }
-    return this.sound.enabled;
-  }
+
 
   // ── frame loop ─────────────────────────────────────────────
   private loop = (now: number) => {
@@ -916,18 +901,6 @@ export class IntroScene {
       this.post.shafts.uniforms.uAmt.value = clamp(amt, 0, 1.4);
     }
 
-    // sound
-    if (dt > 0 && this.prevCamValid) {
-      const moved = this.camera.position.distanceTo(this.prevCam);
-      this.camSpeed += (moved / dt - this.camSpeed) * 0.2;
-    }
-    this.prevCam.copy(this.camera.position);
-    this.prevCamValid = true;
-    this.sound.update(t, {
-      charge: charge + (after ? 0.2 * Math.exp(-tb) : 0),
-      speed: clamp(this.camSpeed / 55 + implode * 0.6, 0, 1),
-      shake: clamp(Math.abs(pose.roll) * 3, 0, 1),
-    });
   }
 
   // ── teardown ───────────────────────────────────────────────
@@ -936,7 +909,6 @@ export class IntroScene {
     cancelAnimationFrame(this.raf);
     document.removeEventListener("visibilitychange", this.onVisibility);
     this.ro.disconnect();
-    this.sound.dispose();
     this.monos.forEach((m) => {
       if (m.video) {
         m.video.pause();

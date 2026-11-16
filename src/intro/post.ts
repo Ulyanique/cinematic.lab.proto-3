@@ -61,7 +61,7 @@ export function buildPost(
         uAberr: { value: 0.4 },
         uStreak: { value: 0 },
         uGrain: { value: 0.022 },
-        uVignette: { value: 0.64 },
+        uVignette: { value: 0.72 },
       },
       vertexShader: finalVert,
       fragmentShader: finalFrag,

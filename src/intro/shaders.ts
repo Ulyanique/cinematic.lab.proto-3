@@ -49,7 +49,7 @@ uniform float uCharge;
 // Art-directed studio environment: warm horizon, dark zenith, two streaks.
 vec3 envColor(vec3 R){
   float y = R.y;
-  vec3 horizon = vec3(1.0, 0.5, 0.1) * 0.30;
+  vec3 horizon = vec3(1.0, 0.68, 0.30) * 0.26;
   vec3 zenith  = vec3(0.09, 0.04, 0.009);
   vec3 c = mix(horizon, zenith, smoothstep(0.0, 0.85, y));
   c = mix(c, vec3(0.07, 0.03, 0.006), 1.0 - smoothstep(-0.5, 0.0, y));
@@ -65,7 +65,7 @@ vec3 envColor(vec3 R){
 vec3 goldShade(vec3 N, vec3 V, vec3 wpos, float seed){
   vec3 R = reflect(-V, N);
   float ndv = clamp(dot(N, V), 0.0, 1.0);
-  vec3 F0 = vec3(1.0, 0.70, 0.235);
+  vec3 F0 = vec3(1.0, 0.78, 0.36);
   // a hot Fresnel rim is what makes gold read as metal on a big flat facet
   vec3 F = F0 + (1.0 - F0) * pow(1.0 - ndv, 4.0) * 0.9;
 
@@ -213,7 +213,7 @@ void main(){
   float dist = length(vWPos.xz);
   float pulse = pow(0.5 + 0.5 * sin(dist * 0.07 - uTime * 1.8), 8.0);
   float eI = 0.22 + pulse * 0.34;
-  vec3 edgeCol = vec3(1.0, 0.74, 0.26);
+  vec3 edgeCol = vec3(1.0, 0.82, 0.44);
 
   #ifdef TERRAIN
     eI += (1.0 - vBuild) * 6.0;
@@ -385,13 +385,13 @@ void main(){
   vec3 q = vec3(d.x * 5.0, h * 9.0 - uTime * 0.35, d.z * 5.0);
   float n = fbm3(q + vec3(0.0, fbm3(q * 0.7 + uTime * 0.1) * 1.5, 0.0));
   float flame = smoothstep(0.33, 0.9, n) * exp(-max(h, 0.0) * 6.5);
-  col += vec3(1.0, 0.48, 0.09) * flame * 0.6;
+  col += vec3(1.0, 0.62, 0.26) * flame * 0.6;
 
   // the core bloom feeding the sky
   float cg = pow(max(dot(d, normalize(uCoreDir)), 0.0), 18.0);
-  col += vec3(1.0, 0.6, 0.2) * cg * uCoreGlow;
+  col += vec3(1.0, 0.72, 0.34) * cg * uCoreGlow;
   float ring = pow(max(dot(d, normalize(uCoreDir)), 0.0), 3.0);
-  col += vec3(1.0, 0.4, 0.1) * ring * uCoreGlow * 0.06;
+  col += vec3(1.0, 0.56, 0.2) * ring * uCoreGlow * 0.06;
 
   col *= uSkyAmt * uExposure;
   gl_FragColor = vec4(col, 1.0);
@@ -865,7 +865,7 @@ void main(){
 
   // Gold grade (linear). Lemon (224,196,106) lands on amber gold (~207,166,60)
   // while the white-hot core keeps a warm edge instead of going pure white.
-  m *= vec3(1.0, 0.68, 0.36);
+  m *= vec3(1.0, 0.84, 0.60);
 
   // gentle S-curve + a real black point — the haze was lifting everything into milk
   m = m * m * (3.0 - 2.0 * m) * 0.38 + m * 0.62;
@@ -873,7 +873,7 @@ void main(){
 
   // gold reads as gold only when it is saturated; the old grade washed it out
   float luma = dot(m, vec3(0.2126, 0.7152, 0.0722));
-  m = clamp(mix(vec3(luma), m, 1.06), 0.0, 1.0);
+  m = clamp(mix(vec3(luma), m, 1.10), 0.0, 1.0);
 
   m = pow(m, vec3(0.95, 1.0, 1.08));
 
