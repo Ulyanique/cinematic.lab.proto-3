@@ -673,6 +673,8 @@ export class IntroScene {
     const fade = smoothstep(0, TL.FADE_IN, t);
     const charge = after ? 0 : smoothstep(TL.CHARGE_START, TL.CONVERGE_END + 0.4, t);
     const implode = after ? 0 : smoothstep(TL.IMPLODE_START, TL.BLAST, t);
+    // one continuous hand-over: nothing in the light rig may jump at TL.BLAST
+    const bt = smoothstep(TL.BLAST - 0.12, TL.BLAST + 0.12, t);
     const flash = t < TL.BLAST ? 0.34 * Math.pow(smoothstep(TL.BLAST - 0.6, TL.BLAST, t), 2.4) : Math.exp(-tb * 9.0);
     const shutdown = smoothstep(TL.CONVERGE_END, TL.CONVERGE_END + 0.55, t);
 
@@ -723,15 +725,21 @@ export class IntroScene {
     // Steady afterglow between the blast and the finished logo: every other light
     // decays exponentially there, so 28.8-30.3 s had nothing left to light it.
     const fill = smoothstep(TL.BLAST, TL.BLAST + 0.7, t) * (1 - smoothstep(TL.SOLID - 0.3, TL.SOLID + 0.7, t));
-    const hk = after ? 2.2 * Math.exp(-tb * 2.6) + 0.07 : (0.28 + 0.85 * charge + 2.6 * implode * implode) * seedGlow;
-    const hs = after
-      ? 13 + 95 * Math.exp(-tb * 2.8)
-      : (2.5 + 8 * charge + 16 * implode * implode) * seedGlow + 0.01;
+    const hkPre = (0.28 + 0.85 * charge + 2.6 * implode * implode) * seedGlow;
+    const hkPost = 2.2 * Math.exp(-tb * 2.6) + 0.07;
+    const hk = hkPre + (hkPost - hkPre) * bt;
+    const hsPre = (2.5 + 8 * charge + 16 * implode * implode) * seedGlow + 0.01;
+    const hsPost = 13 + 95 * Math.exp(-tb * 2.8);
+    const hs = hsPre + (hsPost - hsPre) * bt;
     this.halos[0].scale.setScalar(hs + 20 * fill);
     const hkF = hk + 0.75 * fill;
     (this.halos[0].material as THREE.SpriteMaterial).color.setRGB(hkF, 0.82 * hkF, 0.5 * hkF);
-    const hk2 = after ? 1.5 * Math.exp(-tb * 1.8) + 0.045 : (0.14 + 0.42 * charge + 1.0 * implode) * seedGlow;
-    const hs2 = after ? 40 + 170 * Math.exp(-tb * 2.2) : (13 + 52 * charge + 44 * implode) * seedGlow + 0.01;
+    const hk2Pre = (0.14 + 0.42 * charge + 1.0 * implode) * seedGlow;
+    const hk2Post = 1.5 * Math.exp(-tb * 1.8) + 0.045;
+    const hk2 = hk2Pre + (hk2Post - hk2Pre) * bt;
+    const hs2Pre = (13 + 52 * charge + 44 * implode) * seedGlow + 0.01;
+    const hs2Post = 40 + 170 * Math.exp(-tb * 2.2);
+    const hs2 = hs2Pre + (hs2Post - hs2Pre) * bt;
     this.halos[1].scale.setScalar(hs2);
     const hk2F = hk2 + 0.4 * fill;
     (this.halos[1].material as THREE.SpriteMaterial).color.setRGB(hk2F, 0.6 * hk2F, 0.25 * hk2F);
@@ -739,9 +747,9 @@ export class IntroScene {
     // beam of light into the sky
     const beamR = 0.4 + 1.2 * charge - 0.85 * implode + (after ? 2.6 * Math.exp(-tb * 2.4) : 0);
     this.beam.scale.set(Math.max(beamR, 0.05), 190, Math.max(beamR, 0.05));
-    this.beamMat.uniforms.uAmt.value = after
-      ? 2.6 * Math.exp(-tb * 2.6)
-      : 0.35 * smoothstep(0.8, 3, t) + 0.5 * charge;
+    const beamPre = 0.35 * smoothstep(0.8, 3, t) + 0.5 * charge;
+    const beamPost = 2.6 * Math.exp(-tb * 2.6);
+    this.beamMat.uniforms.uAmt.value = beamPre + (beamPost - beamPre) * bt;
     this.beam.visible = this.beamMat.uniforms.uAmt.value > 0.01;
 
     // ── detonation shells
