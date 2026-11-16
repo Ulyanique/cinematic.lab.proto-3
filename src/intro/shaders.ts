@@ -895,9 +895,6 @@ void main(){
   float v = smoothstep(0.28, 1.05, length(ca * 1.22));
   m *= 1.0 - uVignette * v;
 
-  float g = h12(vUv * 1500.0 + floor(uTime * 24.0) * 37.0) - 0.5;
-  m += g * uGrain;
-
   m *= uFade;
   m = pow(max(m, 0.0), vec3(1.0 / 2.2));
   gl_FragColor = vec4(m, 1.0);

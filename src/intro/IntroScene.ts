@@ -890,7 +890,7 @@ export class IntroScene {
     fu.uAberr.value = (0.3 + 1.5 * flash + 0.28 * implode + 0.18 * charge) * (1 - 0.62 * solid);
     fu.uStreak.value =
       smoothstep(1.4, 5, t) * (0.7 + 1.1 * flash + 0.35 * charge) * (1 - smoothstep(TL.BLAST + 0.7, TL.BLAST + 3.4, t));
-    fu.uGrain.value = (0.018 + 0.012 * flash) * (1 - 0.45 * solid);
+    fu.uGrain.value = 0;
     fu.uVignette.value = 0.5 + 0.18 * solid;
 
     // shafts: only while the core is on screen
