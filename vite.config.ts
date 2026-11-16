@@ -16,4 +16,9 @@ export default defineConfig({
       "@": path.resolve(__dirname, "src"),
     },
   },
+  server: {
+    host: true,
+    // Preview environments (Arena / E2B) proxy the app under a dynamic host name.
+    allowedHosts: true,
+  },
 });

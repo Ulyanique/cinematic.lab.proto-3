@@ -3,7 +3,7 @@ import { ConvexGeometry } from "three/addons/geometries/ConvexGeometry.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { goldFrag, goldVert, screenFrag, screenVert } from "./shaders";
 import { groundHeight, mulberry32 } from "./math";
-import { MONO_COUNT, VIDEO_SOURCES } from "./config";
+import { CORE_Y, GATE_DIR, GATE_GAP, MONO_COUNT, RING_R, VIDEO_CLIPS, VIDEO_SOURCES } from "./config";
 
 export type Uniforms = Record<string, THREE.IUniform>;
 
@@ -11,11 +11,14 @@ export interface Monolith {
   group: THREE.Group;
   angle: number;
   height: number;
+  /** base centre in world space (screen side) */
   base: THREE.Vector3;
   goldMat: THREE.ShaderMaterial;
   screenMat: THREE.ShaderMaterial;
   video: HTMLVideoElement | null;
   videoStarted: boolean;
+  /** time (s) at which this crystal starts growing */
+  riseAt: number;
 }
 
 // ───────────────────────── terrain: jittered low-poly golden field
@@ -121,7 +124,7 @@ export function buildPillars(U: Uniforms) {
   const rng = mulberry32(99);
   const specs: PillarSpec[] = [];
 
-  // hero pillars flanking the entry corridor (like the tall ones in the reference)
+  // hero pillars flanking the entry corridor
   const heroes: [number, number, number, number][] = [
     [-30, 128, 11, 78],
     [34, 100, 10, 70],
@@ -129,15 +132,17 @@ export function buildPillars(U: Uniforms) {
     [40, 64, 8, 44],
     [-52, 168, 14, 96],
     [58, 150, 12, 88],
+    [-64, 96, 10, 58],
+    [66, 112, 9, 62],
   ];
   for (const [x, z, w, h] of heroes) {
     specs.push({ x, z, w, d: w * 0.8, h, yaw: (rng() - 0.5) * 0.4 });
     specs.push({ x: x + w * 0.9, z: z + 3, w: w * 0.55, d: w * 0.5, h: h * 0.58, yaw: rng() });
   }
 
-  // scattered clusters
+  // scattered clusters, kept clear of the corridor and of the crystal ring
   let tries = 0;
-  while (specs.length < 90 && tries < 600) {
+  while (specs.length < 96 && tries < 900) {
     tries++;
     const ang = rng() * Math.PI * 2;
     const r = 62 + Math.pow(rng(), 0.8) * 120;
@@ -166,11 +171,9 @@ export function buildPillars(U: Uniforms) {
   const quad = (q: THREE.Vector3[], base: THREE.Vector3, h: number) => {
     const s = rng();
     const b = [
-      // tri 1: q0,q1,q2 hides diagonal (comp 1 = 1)
       [1, 1, 0],
       [0, 1, 0],
       [0, 1, 1],
-      // tri 2: q0,q2,q3 hides diagonal (comp 2 = 1)
       [1, 0, 1],
       [0, 1, 1],
       [0, 0, 1],
@@ -275,12 +278,12 @@ function withBary(geo: THREE.BufferGeometry, rng: () => number) {
 // ───────────────────────── crystal monoliths
 interface MonoBuild {
   geo: THREE.BufferGeometry;
-  quad: THREE.Vector3[]; // FBL, FBR, FTR, FTL (coplanar)
+  quad: THREE.Vector3[]; // FBL, FBR, FTR, FTL
   H: number;
 }
 
 function buildMonolithGeometry(rng: () => number, H: number, W: number): MonoBuild {
-  const D = W * (0.55 + rng() * 0.3);
+  const D = W * (0.6 + rng() * 0.3);
   const zf = D * 0.45;
   const b = -(0.03 + rng() * 0.05);
   const yt = H * (0.7 + rng() * 0.08);
@@ -341,29 +344,55 @@ function buildMonolithGeometry(rng: () => number, H: number, W: number): MonoBui
   return { geo: withBary(merged, rng), quad: [FBL, FBR, FTR, FTL], H };
 }
 
-function buildScreenGeometry(quad: THREE.Vector3[]) {
-  const c = quad.reduce((a, p) => a.add(p), new THREE.Vector3()).multiplyScalar(0.25);
-  const n = quad[1]
-    .clone()
-    .sub(quad[0])
-    .cross(quad[3].clone().sub(quad[0]))
-    .normalize();
-  const pts = quad.map((p) => p.clone().sub(c).multiplyScalar(0.86).add(c).addScaledVector(n, 0.05));
+/** The video plate: the flat front facet, shrunk and pushed slightly proud of the crystal.
+ *  It is deliberately NOT a rectangle — the clip is masked by a faceted,
+ *  chamfered outline so the placeholder reads as part of the monolith. */
+const SCREEN_SHAPES: [number, number][][] = [
+  // 0 — chamfered crown, heavy left shoulder
+  [[0.03, 0.0], [0.97, 0.0], [0.97, 0.7], [0.64, 1.0], [0.24, 0.9], [0.03, 0.58]],
+  // 1 — tilted blade
+  [[0.06, 0.12], [0.95, 0.0], [0.99, 0.6], [0.6, 1.0], [0.16, 0.86]],
+  // 2 — sheared wedge
+  [[0.0, 0.05], [0.91, 0.0], [1.0, 0.52], [0.7, 1.0], [0.1, 0.78]],
+];
+
+function buildScreenGeometry(quad: THREE.Vector3[], variant: number) {
+  const [bl, br, tr, tl] = quad;
+  const n = br.clone().sub(bl).cross(tl.clone().sub(bl)).normalize();
+  const shape = SCREEN_SHAPES[variant % SCREEN_SHAPES.length];
+  const inset = 0.82;
+  // bilinear-ish frame of the front facet
+  const ex = br.clone().sub(bl).multiplyScalar(inset);
+  const ey = tl.clone().sub(bl).multiplyScalar(inset);
+  const origin = bl.clone().lerp(br, 0.5).lerp(tl.clone().lerp(tr, 0.5), 0.5);
+  const at = (u: number, v: number) =>
+    origin.clone().addScaledVector(ex, u - 0.5).addScaledVector(ey, v - 0.5).addScaledVector(n, 0.16);
+  const pts = shape.map(([u, v]) => at(u, v));
+  const cu = shape.reduce((a, p) => a + p[0], 0) / shape.length;
+  const cv = shape.reduce((a, p) => a + p[1], 0) / shape.length;
+  const centre = at(cu, cv);
+  const arr: number[] = [centre.x, centre.y, centre.z];
+  const uvs: number[] = [cu, cv];
+  pts.forEach((p) => {
+    arr.push(p.x, p.y, p.z);
+  });
+  shape.forEach(([u, v]) => uvs.push(u, v));
+  const idx: number[] = [];
+  for (let k = 0; k < pts.length; k++) idx.push(0, 1 + k, 1 + ((k + 1) % pts.length));
   const geo = new THREE.BufferGeometry();
-  const arr: number[] = [];
-  pts.forEach((p) => arr.push(p.x, p.y, p.z));
   geo.setAttribute("position", new THREE.Float32BufferAttribute(arr, 3));
-  geo.setAttribute("uv", new THREE.Float32BufferAttribute([0, 0, 1, 0, 1, 1, 0, 1], 2));
-  geo.setIndex([0, 1, 2, 0, 2, 3]);
-  const w = (pts[0].distanceTo(pts[1]) + pts[3].distanceTo(pts[2])) / 2;
-  const h = (pts[0].distanceTo(pts[3]) + pts[1].distanceTo(pts[2])) / 2;
-  return { geo, aspect: w / h };
+  geo.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  const w = Math.abs(br.x - bl.x) + Math.abs(tr.x - tl.x) + Math.abs(br.z - bl.z) + Math.abs(tr.z - tl.z);
+  const h = bl.distanceTo(tl) + br.distanceTo(tr);
+  return { geo, aspect: (w * 0.5) / (h * 0.5) };
 }
 
-// Placeholder "video" frame drawn on a canvas (replace with VIDEO_SOURCES)
-function makePlaceholderTexture(index: number, aspect: number) {
-  const w = 512;
-  const h = Math.round(Math.min(1100, Math.max(512, w / aspect)));
+/** Procedural "video slate" used until a real clip is wired in. */
+function makePlaceholderTexture(index: number, aspect: number, title?: string) {
+  const w = 420;
+  const h = Math.round(Math.min(900, Math.max(420, w / Math.max(aspect, 0.4))));
   const c = document.createElement("canvas");
   c.width = w;
   c.height = h;
@@ -371,9 +400,9 @@ function makePlaceholderTexture(index: number, aspect: number) {
   const rng = mulberry32(1000 + index * 13);
 
   const bg = g.createLinearGradient(0, 0, w, h);
-  bg.addColorStop(0, "#241507");
+  bg.addColorStop(0, "#22140a");
   bg.addColorStop(0.5, "#4a2d0b");
-  bg.addColorStop(1, "#140b03");
+  bg.addColorStop(1, "#120a03");
   g.fillStyle = bg;
   g.fillRect(0, 0, w, h);
 
@@ -384,7 +413,10 @@ function makePlaceholderTexture(index: number, aspect: number) {
   for (let j = 0; j <= rows; j++) {
     px[j] = [];
     for (let i = 0; i <= cols; i++) {
-      px[j][i] = [(i / cols) * w + (rng() - 0.5) * (w / cols) * 0.6, (j / rows) * h + (rng() - 0.5) * (h / rows) * 0.6];
+      px[j][i] = [
+        (i / cols) * w + (rng() - 0.5) * (w / cols) * 0.6,
+        (j / rows) * h + (rng() - 0.5) * (h / rows) * 0.6,
+      ];
     }
   }
   for (let j = 0; j < rows; j++) {
@@ -402,9 +434,9 @@ function makePlaceholderTexture(index: number, aspect: number) {
         g.lineTo(tri[1][0], tri[1][1]);
         g.lineTo(tri[2][0], tri[2][1]);
         g.closePath();
-        g.fillStyle = `rgba(255,${150 + Math.floor(rng() * 70)},${40 + Math.floor(rng() * 50)},${0.02 + rng() * 0.14})`;
+        g.fillStyle = `rgba(255,${150 + Math.floor(rng() * 70)},${40 + Math.floor(rng() * 50)},${0.02 + rng() * 0.13})`;
         g.fill();
-        g.strokeStyle = "rgba(255,190,80,0.16)";
+        g.strokeStyle = "rgba(255,190,80,0.15)";
         g.lineWidth = 1;
         g.stroke();
       }
@@ -413,37 +445,37 @@ function makePlaceholderTexture(index: number, aspect: number) {
 
   const vg = g.createRadialGradient(w / 2, h / 2, h * 0.1, w / 2, h / 2, h * 0.7);
   vg.addColorStop(0, "rgba(255,170,60,0.22)");
-  vg.addColorStop(1, "rgba(0,0,0,0.55)");
+  vg.addColorStop(1, "rgba(0,0,0,0.6)");
   g.fillStyle = vg;
   g.fillRect(0, 0, w, h);
 
-  // play button
+  // play glyph
   const cx = w / 2;
   const cy = h / 2;
-  const R = Math.min(w, h) * 0.17;
-  g.strokeStyle = "rgba(255,214,130,0.95)";
-  g.lineWidth = 4;
+  const R = Math.min(w, h) * 0.15;
+  g.strokeStyle = "rgba(255,214,130,0.9)";
+  g.lineWidth = 3;
   g.beginPath();
   g.arc(cx, cy, R, 0, Math.PI * 2);
   g.stroke();
-  g.strokeStyle = "rgba(255,214,130,0.35)";
-  g.lineWidth = 1.5;
+  g.strokeStyle = "rgba(255,214,130,0.3)";
+  g.lineWidth = 1.2;
   g.beginPath();
-  g.arc(cx, cy, R * 1.28, 0, Math.PI * 2);
+  g.arc(cx, cy, R * 1.3, 0, Math.PI * 2);
   g.stroke();
-  g.fillStyle = "rgba(255,226,160,0.98)";
+  g.fillStyle = "rgba(255,226,160,0.95)";
   g.beginPath();
-  g.moveTo(cx - R * 0.28, cy - R * 0.42);
-  g.lineTo(cx + R * 0.5, cy);
-  g.lineTo(cx - R * 0.28, cy + R * 0.42);
+  g.moveTo(cx - R * 0.26, cy - R * 0.4);
+  g.lineTo(cx + R * 0.48, cy);
+  g.lineTo(cx - R * 0.26, cy + R * 0.4);
   g.closePath();
   g.fill();
 
   // corner brackets
-  g.strokeStyle = "rgba(255,206,110,0.9)";
-  g.lineWidth = 3;
-  const m = 26;
-  const L = 44;
+  g.strokeStyle = "rgba(255,206,110,0.85)";
+  g.lineWidth = 2.5;
+  const m = Math.round(w * 0.055);
+  const L = Math.round(w * 0.1);
   const br = (x: number, y: number, sx: number, sy: number) => {
     g.beginPath();
     g.moveTo(x, y + sy * L);
@@ -456,43 +488,51 @@ function makePlaceholderTexture(index: number, aspect: number) {
   br(m, h - m, 1, -1);
   br(w - m, h - m, -1, -1);
 
+  const unit = w / 420;
   // labels
-  g.fillStyle = "rgba(255,226,170,0.95)";
-  g.font = "300 26px 'Helvetica Neue', Arial, sans-serif";
+  g.fillStyle = "rgba(255,226,170,0.92)";
+  g.font = `300 ${Math.round(19 * unit)}px 'Helvetica Neue', Arial, sans-serif`;
   g.textAlign = "left";
-  g.fillText("VIDEO", m + 8, m + 66);
-  g.font = "200 150px 'Helvetica Neue', Arial, sans-serif";
+  g.fillText(title ? title.toUpperCase().slice(0, 22) : "VIDEO", m + 6 * unit, m + 46 * unit);
+  g.font = `200 ${Math.round(96 * unit)}px 'Helvetica Neue', Arial, sans-serif`;
   g.fillStyle = "rgba(255,214,140,0.9)";
-  g.fillText(String(index + 1).padStart(2, "0"), m + 4, h - m - 90);
-  g.font = "300 22px 'Helvetica Neue', Arial, sans-serif";
-  g.fillStyle = "rgba(255,226,170,0.7)";
-  g.fillText("PLACEHOLDER · 9:16", m + 8, h - m - 58);
+  g.fillText(String(index + 1).padStart(2, "0"), m + 2 * unit, h - m - 44 * unit);
+  g.font = `300 ${Math.round(15 * unit)}px 'Helvetica Neue', Arial, sans-serif`;
+  g.fillStyle = "rgba(255,226,170,0.65)";
+  g.fillText("AWAITING CLIP", m + 6 * unit, h - m - 24 * unit);
 
   // timeline
-  g.fillStyle = "rgba(255,214,140,0.25)";
-  g.fillRect(m + 8, h - m - 28, w - 2 * m - 16, 3);
+  g.fillStyle = "rgba(255,214,140,0.22)";
+  g.fillRect(m + 6 * unit, h - m - 10 * unit, w - 2 * m - 12 * unit, 2.5 * unit);
   g.fillStyle = "rgba(255,220,150,1)";
   const prog = 0.2 + rng() * 0.5;
-  g.fillRect(m + 8, h - m - 28, (w - 2 * m - 16) * prog, 3);
-  g.beginPath();
-  g.arc(m + 8 + (w - 2 * m - 16) * prog, h - m - 26.5, 7, 0, Math.PI * 2);
-  g.fill();
+  g.fillRect(m + 6 * unit, h - m - 10 * unit, (w - 2 * m - 12 * unit) * prog, 2.5 * unit);
 
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 8;
+  tex.anisotropy = 4;
+  tex.generateMipmaps = true;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
   return tex;
 }
 
-export function buildMonoliths(U: Uniforms) {
+export function crystalAngle(i: number) {
+  // 10 crystals spread over the ring, leaving the gate gap open at GATE_DIR
+  const step = (Math.PI * 2 - GATE_GAP) / (MONO_COUNT - 1);
+  return GATE_DIR + GATE_GAP / 2 + i * step;
+}
+
+export function buildMonoliths(U: Uniforms, maxAnisotropy: number) {
   const rng = mulberry32(2024);
   const list: Monolith[] = [];
   for (let i = 0; i < MONO_COUNT; i++) {
-    const H = 15 + rng() * 11;
-    const W = 6 + rng() * 3.2;
+    // the pair framing the gate is the tallest — it sells the entrance
+    const hero = i === 0 || i === MONO_COUNT - 1;
+    const H = hero ? 27 + rng() * 5 : 18 + rng() * 8;
+    const W = hero ? 10 + rng() * 2.5 : 8 + rng() * 3.5;
     const { geo, quad, H: height } = buildMonolithGeometry(rng, H, W);
-    const angle = 0.314 + (Math.PI * 2 * i) / MONO_COUNT + (rng() - 0.5) * 0.08;
-    const R = 36 + (rng() - 0.5) * 4;
+    const angle = crystalAngle(i) + (rng() - 0.5) * 0.05;
+    const R = RING_R + (rng() - 0.5) * 3;
     const x = Math.sin(angle) * R;
     const z = Math.cos(angle) * R;
     const gy = groundHeight(x, z) - 0.6;
@@ -507,22 +547,30 @@ export function buildMonoliths(U: Uniforms) {
     const body = new THREE.Mesh(geo, goldMat);
     body.frustumCulled = false;
 
-    const { geo: sgeo, aspect } = buildScreenGeometry(quad);
-    let tex: THREE.Texture = makePlaceholderTexture(i, aspect);
+    const { geo: sgeo, aspect } = buildScreenGeometry(quad, i);
+    const slate = makePlaceholderTexture(i, aspect, VIDEO_CLIPS[i]?.title);
+    slate.anisotropy = maxAnisotropy;
+    let tex: THREE.Texture = slate;
     let video: HTMLVideoElement | null = null;
     const src = VIDEO_SOURCES[i];
     if (src) {
       video = document.createElement("video");
-      video.src = src;
       video.crossOrigin = "anonymous";
       video.loop = true;
       video.muted = true;
       video.playsInline = true;
       video.preload = "auto";
+      video.setAttribute("playsinline", "");
+      video.setAttribute("muted", "");
+      video.src = src;
       const vt = new THREE.VideoTexture(video);
       vt.colorSpace = THREE.SRGBColorSpace;
+      vt.minFilter = THREE.LinearFilter;
+      vt.magFilter = THREE.LinearFilter;
+      vt.generateMipmaps = false;
       tex = vt;
     }
+    const plateAspect = aspect;
     const screenMat = new THREE.ShaderMaterial({
       vertexShader: screenVert,
       fragmentShader: screenFrag,
@@ -533,16 +581,36 @@ export function buildMonoliths(U: Uniforms) {
         uGrow: goldMat.uniforms.uGrow,
         uHeight: { value: height },
         uSeed: { value: i * 0.37 },
+        uIsVideo: { value: video ? 1 : 0 },
+        uTexAspect: { value: video ? 16 / 9 : plateAspect },
+        uPlateAspect: { value: plateAspect },
       },
       side: THREE.DoubleSide,
     });
+    if (video) {
+      // if the clip never becomes decodable (missing file, wrong codec) the
+      // plate quietly returns to the generated slate instead of going black
+      const fallback = () => {
+        if (!screenMat.uniforms.uIsVideo.value) return;
+        screenMat.uniforms.uIsVideo.value = 0;
+        screenMat.uniforms.uMap.value = slate;
+        screenMat.uniforms.uTexAspect.value = plateAspect;
+      };
+      video.addEventListener("loadedmetadata", () => {
+        screenMat.uniforms.uTexAspect.value = video!.videoWidth / Math.max(1, video!.videoHeight);
+      });
+      video.addEventListener("error", fallback);
+      window.setTimeout(() => {
+        if (video!.readyState < 2) fallback();
+      }, 6000);
+    }
     const screen = new THREE.Mesh(sgeo, screenMat);
     screen.frustumCulled = false;
 
     const group = new THREE.Group();
     group.add(body, screen);
     group.position.set(x, gy, z);
-    group.rotation.y = angle + Math.PI; // screens face the centre
+    group.rotation.y = angle + Math.PI; // plates face the plaza
     list.push({
       group,
       angle,
@@ -552,7 +620,34 @@ export function buildMonoliths(U: Uniforms) {
       screenMat,
       video,
       videoStarted: false,
+      riseAt: 0,
     });
   }
   return list;
+}
+
+// ───────────────────────── armillary rings around the core
+export function buildArmillary(material: THREE.ShaderMaterial) {
+  const rng = mulberry32(5);
+  const group = new THREE.Group();
+  const rings: THREE.Mesh[] = [];
+  const radii = [9.6, 12.0, 14.4];
+  const tubes = [0.24, 0.16, 0.11];
+  for (let i = 0; i < 3; i++) {
+    const geo = new THREE.TorusGeometry(radii[i], tubes[i], 8, 220);
+    const mesh = new THREE.Mesh(geo, material);
+    mesh.rotation.set(Math.PI / 2 + (i - 1) * 0.42 + (rng() - 0.5) * 0.1, rng() * 0.9, (i - 1) * 0.5);
+    mesh.position.y = CORE_Y;
+    mesh.frustumCulled = false;
+    rings.push(mesh);
+    group.add(mesh);
+  }
+  // a small "index" bead riding the outer ring, like a bezel marker
+  const beadGeo = new THREE.SphereGeometry(0.55, 16, 12);
+  const bead = new THREE.Mesh(beadGeo, material);
+  bead.position.set(radii[2], 0, 0);
+  bead.frustumCulled = false;
+  rings[2].add(bead);
+
+  return { group, rings, bead };
 }

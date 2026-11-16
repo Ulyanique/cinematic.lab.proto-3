@@ -1,0 +1,11 @@
+node_modules
+dist
+dist-ssr
+*.local
+*.ppm
+*.log
+.DS_Store
+.vite
+# the ten clips are fetched locally, never committed (≈113 MB)
+public/videos/*.mp4
+public/videos/*.webm

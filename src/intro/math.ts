@@ -1,4 +1,4 @@
-// Small math helpers: seeded RNG, value noise, monotone C1 keyframe tracks
+// Small math helpers: seeded RNG, value noise, smooth keyframe tracks.
 
 export function mulberry32(seed: number) {
   let a = seed >>> 0;
@@ -17,11 +17,28 @@ export const smoothstep = (a: number, b: number, x: number) => {
   const t = clamp((x - a) / (b - a));
   return t * t * (3 - 2 * t);
 };
+export const smootherstep = (a: number, b: number, x: number) => {
+  const t = clamp((x - a) / (b - a));
+  return t * t * t * (t * (t * 6 - 15) + 10);
+};
 export const easeOutCubic = (t: number) => 1 - Math.pow(1 - clamp(t), 3);
+export const easeOutQuint = (t: number) => 1 - Math.pow(1 - clamp(t), 5);
+export const easeInCubic = (t: number) => Math.pow(clamp(t), 3);
 export const easeInOut = (t: number) => {
   const x = clamp(t);
   return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
 };
+/** 0 → 1 → 0 bump, used for light sweeps and flares. */
+export const bell = (x: number, width = 1) => Math.exp(-Math.pow(x / width, 2));
+
+export const wrapAngle = (a: number) => {
+  const t = (a + Math.PI) % (Math.PI * 2);
+  return (t < 0 ? t + Math.PI * 2 : t) - Math.PI;
+};
+
+/** Frame-rate independent exponential approach. */
+export const damp = (cur: number, target: number, lambda: number, dt: number) =>
+  lerp(cur, target, 1 - Math.exp(-lambda * dt));
 
 function hash2(x: number, y: number) {
   const h = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
@@ -52,7 +69,7 @@ export function fbm(x: number, y: number) {
   return s;
 }
 
-/** Height of the golden landscape. Calm plaza in the middle, hills further out, a valley along the entry corridor. */
+/** Height of the golden landscape: calm plaza in the middle, hills further out, a valley along the entry corridor. */
 export function groundHeight(x: number, z: number) {
   const r = Math.hypot(x, z);
   const hills = smoothstep(42, 118, r);
@@ -68,7 +85,10 @@ export function smax(a: number, b: number, k: number) {
   return Math.max(a, b) + h * h * k * 0.25;
 }
 
-/** Monotone cubic Hermite through (t, v) keys — smooth velocity, no overshoot. */
+/**
+ * Monotone cubic Hermite through (t, v) keys — smooth velocity, no overshoot.
+ * Flat tangents at both ends make every move start and stop on a soft ease.
+ */
 export function makeTrack(keys: [number, number][]) {
   const n = keys.length;
   const ts = keys.map((k) => k[0]);
@@ -95,4 +115,13 @@ export function makeTrack(keys: [number, number][]) {
       (s3 - s2) * h * m[i + 1]
     );
   };
+}
+
+/** Deterministic multi-octave shake, -1..1-ish. */
+export function shakeNoise(t: number, seed: number) {
+  return (
+    Math.sin(t * 17.3 + seed * 3.1) * 0.55 +
+    Math.sin(t * 29.7 + seed * 7.7) * 0.3 +
+    Math.sin(t * 6.1 + seed * 1.9) * 0.15
+  );
 }
