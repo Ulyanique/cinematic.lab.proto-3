@@ -684,6 +684,21 @@ void main(){
   vec3 F = F0 + (1.0 - F0) * pow(1.0 - ndv, 5.0);
   vec3 col = envColor(R) * F * 1.05;
 
+  // Studio key + fill. The emblem is the hero and it now stands in a dark room,
+  // so it cannot live on reflections alone — without this it renders as a black
+  // silhouette. Warm key from upper front-left, cooler fill from behind right.
+  vec3 K1 = normalize(vec3(-0.42, 0.78, 0.62));
+  vec3 K2 = normalize(vec3(0.72, 0.15, -0.55));
+  float d1 = max(dot(N, K1), 0.0);
+  float d2 = max(dot(N, K2), 0.0);
+  float s1 = pow(max(dot(R, K1), 0.0), 48.0);
+  float s2 = pow(max(dot(R, K2), 0.0), 16.0);
+  float fres = pow(1.0 - ndv, 3.0);
+  col += F0 * (d1 * 0.62 + d2 * 0.20);
+  col += vec3(1.0, 0.93, 0.76) * s1 * 2.2;
+  col += vec3(1.0, 0.72, 0.38) * s2 * 0.55;
+  col += vec3(1.0, 0.80, 0.50) * fres * 0.35;
+
   // three-point rig, fixed in world space so the metal keeps its form
   vec3 L1 = normalize(vec3(-0.45, 0.75, 0.55));
   vec3 L2 = normalize(vec3(0.85, -0.2, 0.45));

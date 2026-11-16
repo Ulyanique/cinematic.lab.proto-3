@@ -693,7 +693,7 @@ export class IntroScene {
       .multiplyScalar(1 - 0.74 * smoothstep(TL.BLAST + 0.6, TL.BLAST + 2.8, t));
     this.inflowCharge.value = after ? 0 : charge;
     // the blast site darkens so the logo can breathe
-    U.uExposure.value = 1 - 0.34 * smoothstep(TL.BLAST + 1.4, TL.BLAST + 3.4, t);
+    U.uExposure.value = 1 - 0.16 * smoothstep(TL.BLAST + 1.4, TL.BLAST + 3.4, t);
 
     // ── core
     const seedGlow = smoothstep(0.3, 2.0, t);
@@ -857,11 +857,10 @@ export class IntroScene {
       const form = smoothstep(TL.FORM_START, TL.SOLID, t);
       // the emblem is molten while it assembles, so it carries its own light: this
       // is what fills the beat between the blast and the reveal
-      this.emblemMat.uniforms.uGlow.value =
-        (0.6 + 1.5 * form + 0.5 * solid) * (1 - 0.35 * smoothstep(TL.TAG_IN, TL.END, t));
+      this.emblemMat.uniforms.uGlow.value = 0.75 + 1.7 * form + 0.7 * solid;
       const auraPulse = 0.5 + 0.5 * Math.sin(t * 1.7);
       this.emblemHalo.scale.setScalar(7.2 + 1.0 * auraPulse + 7 * (1 - form));
-      (this.emblemHalo.material as THREE.MeshBasicMaterial).opacity = 0.05 + 0.26 * form;
+      (this.emblemHalo.material as THREE.MeshBasicMaterial).opacity = 0.05 + 0.36 * form;
       this.emblemHalo.visible = t > TL.FORM_START;
     }
     if (this.logoPts) {
