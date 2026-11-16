@@ -102,7 +102,7 @@ export class IntroScene {
 
   private emblem!: ReturnType<typeof buildCompassEmblem>;
   private emblemMat: THREE.ShaderMaterial;
-  private readonly fogBase = new THREE.Color(0.075, 0.055, 0.03);
+  private readonly fogBase = new THREE.Color(0.045, 0.041, 0.036);
   private emblemHalo: THREE.Mesh;
   private logoPts: THREE.Points;
   private logoMat: THREE.ShaderMaterial;
@@ -149,7 +149,7 @@ export class IntroScene {
       uCorePos: { value: new THREE.Vector3(0, CORE_Y, 0) },
       uMono: { value: Array.from({ length: MONO_COUNT }, () => new THREE.Vector4(0, -80, 0, 0)) },
       uExposure: { value: 1 },
-      uFogColor: { value: new THREE.Color(0.075, 0.055, 0.03) },
+      uFogColor: { value: new THREE.Color(0.045, 0.041, 0.036) },
       uFogDensity: { value: 0.0058 },
       uCharge: { value: 0 },
       uWaveC: { value: new THREE.Vector2(0, 0) },
@@ -767,7 +767,7 @@ export class IntroScene {
       ? 0.85 + 0.5 * Math.exp(-tb * 2.0)
       : 1 - 0.62 * smoothstep(TL.IMPLODE_START - 0.9, TL.BLAST, t);
     this.emberMat.uniforms.uAmt.value =
-      smoothstep(1.6, 5, t) * emberCalm * (1 - 0.62 * smoothstep(TL.BLAST + 3.0, TL.END, t));
+      smoothstep(1.6, 5, t) * emberCalm * 0.55 * (1 - 0.62 * smoothstep(TL.BLAST + 3.0, TL.END, t));
 
     // ── crystals
     const mono = U.uMono.value as THREE.Vector4[];

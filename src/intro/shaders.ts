@@ -49,7 +49,7 @@ uniform float uCharge;
 // Art-directed studio environment: warm horizon, dark zenith, two streaks.
 vec3 envColor(vec3 R){
   float y = R.y;
-  vec3 horizon = vec3(1.0, 0.68, 0.30) * 0.26;
+  vec3 horizon = vec3(1.0, 0.72, 0.38) * 0.24;
   vec3 zenith  = vec3(0.09, 0.04, 0.009);
   vec3 c = mix(horizon, zenith, smoothstep(0.0, 0.85, y));
   c = mix(c, vec3(0.07, 0.03, 0.006), 1.0 - smoothstep(-0.5, 0.0, y));
@@ -385,7 +385,7 @@ void main(){
   vec3 q = vec3(d.x * 5.0, h * 9.0 - uTime * 0.35, d.z * 5.0);
   float n = fbm3(q + vec3(0.0, fbm3(q * 0.7 + uTime * 0.1) * 1.5, 0.0));
   float flame = smoothstep(0.33, 0.9, n) * exp(-max(h, 0.0) * 6.5);
-  col += vec3(1.0, 0.62, 0.26) * flame * 0.6;
+  col += vec3(1.0, 0.66, 0.34) * flame * 0.26;
 
   // the core bloom feeding the sky
   float cg = pow(max(dot(d, normalize(uCoreDir)), 0.0), 18.0);
@@ -865,7 +865,7 @@ void main(){
 
   // Gold grade (linear). Lemon (224,196,106) lands on amber gold (~207,166,60)
   // while the white-hot core keeps a warm edge instead of going pure white.
-  m *= vec3(1.0, 0.84, 0.60);
+  m *= vec3(1.0, 0.93, 0.82);
 
   // gentle S-curve + a real black point — the haze was lifting everything into milk
   m = m * m * (3.0 - 2.0 * m) * 0.38 + m * 0.62;
@@ -873,7 +873,7 @@ void main(){
 
   // gold reads as gold only when it is saturated; the old grade washed it out
   float luma = dot(m, vec3(0.2126, 0.7152, 0.0722));
-  m = clamp(mix(vec3(luma), m, 1.10), 0.0, 1.0);
+  m = clamp(mix(vec3(luma), m, 1.14), 0.0, 1.0);
 
   m = pow(m, vec3(0.95, 1.0, 1.08));
 
