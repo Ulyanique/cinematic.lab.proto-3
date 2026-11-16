@@ -709,9 +709,12 @@ export class IntroScene {
     (U.uCore.value as THREE.Vector4).w = coreI;
 
     const pulse = 1 + 0.06 * Math.sin(t * 6 * (1 + charge * 3));
-    const orbR =
-      (0.3 + 3.9 * Math.pow(charge, 1.35)) * (1 - 0.85 * implode * implode) * pulse * smoothstep(0.3, 1.7, t);
-    this.orb.visible = !after && orbR > 0.01;
+    const orbR = after
+      ? 3.6 * Math.exp(-tb * 6.0)
+      : (0.3 + 3.9 * Math.pow(charge, 1.35)) * (1 - 0.85 * implode * implode) * pulse * smoothstep(0.3, 1.7, t);
+    // the core survives the first frames of the blast so the hand-over from the
+    // implosion to the fireball is continuous instead of a white-to-black cut
+    this.orb.visible = orbR > 0.01;
     this.orb.scale.setScalar(Math.max(orbR, 0.001));
     this.orbMat.uniforms.uIntensity.value = 0.6 + 1.5 * charge + 4 * implode;
 
@@ -748,7 +751,7 @@ export class IntroScene {
         // camera distance (the previous attempt) scaled it past the camera within
         // one frame, so the shell was always invisible and the blast read black.
         const camDist = this.camera.position.distanceTo(this.shells[i].position);
-        const sc = Math.min(105 * (1 - Math.exp(-speed * tt)), camDist * 0.86);
+        const sc = Math.min(6.5 + 105 * (1 - Math.exp(-speed * tt)), camDist * 0.86);
         this.shells[i].scale.setScalar(Math.max(0.01, sc));
         this.shellMats[i].uniforms.uAmt.value =
           (i === 0 ? 2.4 : 1.1) * Math.exp(-tt * (i === 0 ? 3.1 : 2.1));
