@@ -47,7 +47,7 @@ export const MONO_COUNT = 10;
 export const RING_R = 36; // radius of the crystal ring
 export const CORE_Y = 12; // height of the energy core above the plaza
 /** Angular gap in the ring (radians) the camera flies through — the "gate". */
-export const GATE_GAP = 0.82;
+export const GATE_GAP = 1.0;
 export const GATE_DIR = 0; // gap faces +Z (camera's entry direction)
 
 // ── timeline (seconds) ───────────────────────────────────────

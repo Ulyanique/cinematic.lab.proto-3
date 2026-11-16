@@ -230,7 +230,7 @@ root.traverse((o) => {
   const m = o as THREE.Mesh;
   if (m.isMesh && m.userData.color) (m as any).__color = m.userData.color;
 });
-for (const t of [26.4, 28.2, 29.0, 29.7, 30.4, 31.5]) {
+for (const t of [9.8, 10.2, 10.8, 11.4]) {
   const pose = rig.sample(t);
   cam.position.copy(pose.pos);
   cam.up.set(0, 1, 0);

@@ -217,7 +217,9 @@ void main(){
 
   #ifdef TERRAIN
     eI += (1.0 - vBuild) * 6.0;
-    eI *= 0.55 + uCharge * 0.5;
+    eI *= 0.42 + uCharge * 0.5;
+    // a slow tonal drift across the plaza keeps the facets from reading as tiles
+    col *= 0.62 + 0.55 * fract(vSeed * 3.77);
     // only a small share of the facets catch a lit edge, and faintly — reads as
     // polished shards catching the sky, never as a wireframe mesh
     eI *= smoothstep(0.55, 0.93, fract(vSeed * 13.7));

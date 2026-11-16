@@ -529,7 +529,7 @@ export function buildMonoliths(U: Uniforms, maxAnisotropy: number) {
     // the pair framing the gate is the tallest — it sells the entrance
     const hero = i === 0 || i === MONO_COUNT - 1;
     const H = hero ? 27 + rng() * 5 : 18 + rng() * 8;
-    const W = hero ? 10 + rng() * 2.5 : 8 + rng() * 3.5;
+    const W = hero ? 8.5 + rng() * 2.0 : 8 + rng() * 3.5;
     const { geo, quad, H: height } = buildMonolithGeometry(rng, H, W);
     const angle = crystalAngle(i) + (rng() - 0.5) * 0.05;
     const R = RING_R + (rng() - 0.5) * 3;
