@@ -617,7 +617,13 @@ export class IntroScene {
     const rawDt = (now - this.last) / 1000;
     this.last = now;
     const dt = Math.min(0.05, Math.max(0, rawDt));
-    if (this.playing && !this.freeze) this.t += dt;
+    if (this.playing && !this.freeze) {
+      this.t += dt;
+      if (this.t >= TL.END) {
+        this.t = TL.END;
+        this.playing = false;
+      }
+    }
 
     // adaptive resolution: shed pixels on heavy frames, recover when calm
     if (rawDt > 1 / 30) {
@@ -858,8 +864,8 @@ export class IntroScene {
       // the emblem is molten while it assembles, so it carries its own light: this
       // is what fills the beat between the blast and the reveal
       this.emblemMat.uniforms.uGlow.value = 0.75 + 1.7 * form + 0.7 * solid;
-      const auraPulse = 0.5 + 0.5 * Math.sin(t * 1.7);
-      this.emblemHalo.scale.setScalar(7.2 + 1.0 * auraPulse + 7 * (1 - form));
+      // a frozen hold: no sine pulse, so the last frame is bit-for-bit still
+      this.emblemHalo.scale.setScalar(7.6 + 7 * (1 - form));
       (this.emblemHalo.material as THREE.MeshBasicMaterial).opacity = 0.05 + 0.36 * form;
       this.emblemHalo.visible = t > TL.FORM_START;
     }
