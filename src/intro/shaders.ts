@@ -54,10 +54,10 @@ vec3 envColor(vec3 R){
   vec3 c = mix(horizon, zenith, smoothstep(0.0, 0.85, y));
   c = mix(c, vec3(0.07, 0.03, 0.006), 1.0 - smoothstep(-0.5, 0.0, y));
   c += vec3(1.0, 0.86, 0.52) * 1.35 * pow(max(dot(R, normalize(vec3(0.45, 0.65, -0.6))), 0.0), 26.0);
-  c += vec3(1.0, 0.55, 0.18) * 0.85 * pow(max(dot(R, normalize(vec3(-0.75, 0.35, 0.35))), 0.0), 14.0);
-  c += vec3(1.0, 0.75, 0.35) * 0.5 * pow(max(dot(R, normalize(vec3(0.1, 0.25, 0.95))), 0.0), 12.0);
+  c += vec3(1.0, 0.48, 0.12) * 0.85 * pow(max(dot(R, normalize(vec3(-0.75, 0.35, 0.35))), 0.0), 14.0);
+  c += vec3(1.0, 0.60, 0.20) * 0.42 * pow(max(dot(R, normalize(vec3(0.1, 0.25, 0.95))), 0.0), 12.0);
   float strip = smoothstep(0.93, 1.0, sin(R.x * 4.0 + R.z * 3.0 + R.y * 2.0) * 0.5 + 0.5);
-  c += vec3(1.0, 0.82, 0.5) * 0.75 * strip * smoothstep(-0.1, 0.5, y);
+  c += vec3(1.0, 0.66, 0.28) * 0.62 * strip * smoothstep(-0.1, 0.5, y);
   return c;
 }
 
@@ -65,13 +65,13 @@ vec3 envColor(vec3 R){
 vec3 goldShade(vec3 N, vec3 V, vec3 wpos, float seed){
   vec3 R = reflect(-V, N);
   float ndv = clamp(dot(N, V), 0.0, 1.0);
-  vec3 F0 = vec3(1.0, 0.755, 0.32);
+  vec3 F0 = vec3(1.0, 0.70, 0.235);
   vec3 F = F0 + (1.0 - F0) * pow(1.0 - ndv, 5.0) * 0.34;
 
   vec3 col = envColor(R) * F * 0.72;
 
   // brushed micro-structure
-  float brush = 0.82 + 0.36 * fract(seed * 7.31);
+  float brush = 0.68 + 0.62 * fract(seed * 7.31);
   float streak = smoothstep(0.35, 1.0, sin(wpos.y * 9.0 + seed * 61.0) * 0.5 + 0.5);
   col *= brush * (0.94 + 0.10 * streak);
 
@@ -83,7 +83,7 @@ vec3 goldShade(vec3 N, vec3 V, vec3 wpos, float seed){
   float diff = max(dot(N, L), 0.0);
   float spec = pow(max(dot(R, L), 0.0), 26.0);
   float wide = pow(max(dot(R, L), 0.0), 3.0) * 0.12;
-  col += (F0 * diff * 0.45 + vec3(1.0, 0.86, 0.58) * (spec * 1.7 + wide)) * att;
+  col += (F0 * diff * 0.45 + vec3(1.0, 0.76, 0.40) * (spec * 1.7 + wide)) * att;
 
   // hemisphere bounce keeps the dark sides alive
   col += F0 * vec3(0.55, 0.33, 0.12) * 0.055 * (0.5 + 0.5 * N.y);
@@ -206,7 +206,7 @@ void main(){
   vec3 col = goldShade(N, V, vWPos, vSeed);
   float ao;
   vec3 pool = pools(vWPos, ao);
-  col = col * mix(1.0, ao, 0.55) + pool * vec3(0.42, 0.38, 0.32) * ao;
+  col = col * mix(1.0, ao, 0.55) + pool * vec3(0.48, 0.35, 0.19) * ao;
 
   float dist = length(vWPos.xz);
   float pulse = pow(0.5 + 0.5 * sin(dist * 0.07 - uTime * 1.8), 8.0);
@@ -857,10 +857,20 @@ void main(){
 
   col += uFlash * vec3(1.0, 0.9, 0.66) * (1.35 - length(c) * 0.9);
 
-  vec3 m = aces(col * 0.86);
+  vec3 m = aces(col * 0.80);
+
+  // Gold grade (linear). Lemon (224,196,106) lands on amber gold (~207,166,60)
+  // while the white-hot core keeps a warm edge instead of going pure white.
+  m *= vec3(0.88, 0.52, 0.24);
+
   // gentle S-curve + a real black point — the haze was lifting everything into milk
-  m = m * m * (3.0 - 2.0 * m) * 0.34 + m * 0.66;
-  m = max(m - 0.012, 0.0) / 0.988;
+  m = m * m * (3.0 - 2.0 * m) * 0.38 + m * 0.62;
+  m = clamp(max(m - 0.014, 0.0) / 0.986, 0.0, 1.0);
+
+  // gold reads as gold only when it is saturated; the old grade washed it out
+  float luma = dot(m, vec3(0.2126, 0.7152, 0.0722));
+  m = clamp(mix(vec3(luma), m, 1.18), 0.0, 1.0);
+
   m = pow(m, vec3(0.95, 1.0, 1.08));
 
   float v = smoothstep(0.28, 1.05, length(ca * 1.22));

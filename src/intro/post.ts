@@ -31,7 +31,7 @@ export function buildPost(
   const composer = new EffectComposer(renderer, rt);
   composer.addPass(new RenderPass(scene, camera));
 
-  const bloom = new UnrealBloomPass(new THREE.Vector2(quality.bloomRes, quality.bloomRes), 0.62, 0.62, 0.78);
+  const bloom = new UnrealBloomPass(new THREE.Vector2(quality.bloomRes, quality.bloomRes), 0.52, 0.6, 0.86);
   composer.addPass(bloom);
 
   const shafts = new ShaderPass(
@@ -61,7 +61,7 @@ export function buildPost(
         uAberr: { value: 0.4 },
         uStreak: { value: 0 },
         uGrain: { value: 0.022 },
-        uVignette: { value: 0.55 },
+        uVignette: { value: 0.64 },
       },
       vertexShader: finalVert,
       fragmentShader: finalFrag,
