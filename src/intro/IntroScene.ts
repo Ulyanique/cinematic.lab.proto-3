@@ -711,14 +711,16 @@ export class IntroScene {
     (U.uCore.value as THREE.Vector4).w = coreI;
 
     const pulse = 1 + 0.06 * Math.sin(t * 6 * (1 + charge * 3));
-    const orbR = after
-      ? 3.6 * Math.exp(-tb * 6.0)
-      : (0.3 + 3.9 * Math.pow(charge, 1.35)) * (1 - 0.85 * implode * implode) * pulse * smoothstep(0.3, 1.7, t);
+    const orbPre = (0.3 + 3.9 * Math.pow(charge, 1.35)) * (1 - 0.85 * implode * implode) * pulse * smoothstep(0.3, 1.7, t);
+    const orbPost = 3.6 * Math.exp(-tb * 6.0);
+    const orbR = orbPre + (orbPost - orbPre) * bt;
     // the core survives the first frames of the blast so the hand-over from the
     // implosion to the fireball is continuous instead of a white-to-black cut
     this.orb.visible = orbR > 0.01;
     this.orb.scale.setScalar(Math.max(orbR, 0.001));
-    this.orbMat.uniforms.uIntensity.value = 0.6 + 1.5 * charge + 4 * implode;
+    const intPre = 0.6 + 1.5 * charge + 4 * implode;
+    const intPost = 0.6 + 2.2 * Math.exp(-tb * 5.0);
+    this.orbMat.uniforms.uIntensity.value = intPre + (intPost - intPre) * bt;
 
     // halos: inner tight, outer soft
     // after the blast a low warm afterglow stays behind so the plaza never goes pitch black
