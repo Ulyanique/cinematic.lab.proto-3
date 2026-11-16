@@ -216,7 +216,11 @@ const emblem = buildCompassEmblem(mat);
 emblem.group.position.set(0, CORE_Y + 0.35, 0);
 emblem.group.scale.setScalar(1.08);
 root.add(emblem.group);
-emblem.group.visible = false;
+emblem.group.visible = true;
+emblem.group.traverse((o) => {
+  const m = o as THREE.Mesh;
+  if (m.isMesh) m.userData.color = [1.0, 0.72, 0.22];
+});
 
 const rig = new CameraRig(monos.map((m) => ({ x: m.base.x, z: m.base.z, r: 6 })));
 const cam = new THREE.PerspectiveCamera(40, W / H, 0.1, 2000);
@@ -226,7 +230,7 @@ root.traverse((o) => {
   const m = o as THREE.Mesh;
   if (m.isMesh && m.userData.color) (m as any).__color = m.userData.color;
 });
-for (const t of [2, 6, 10, 11.4, 14, 18, 22, 26, 28.2]) {
+for (const t of [26.4, 28.2, 29.0, 29.7, 30.4, 31.5]) {
   const pose = rig.sample(t);
   cam.position.copy(pose.pos);
   cam.up.set(0, 1, 0);

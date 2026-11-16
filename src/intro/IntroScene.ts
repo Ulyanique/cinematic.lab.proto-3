@@ -682,7 +682,7 @@ export class IntroScene {
     const fade = smoothstep(0, TL.FADE_IN, t);
     const charge = after ? 0 : smoothstep(TL.CHARGE_START, TL.CONVERGE_END + 0.4, t);
     const implode = after ? 0 : smoothstep(TL.IMPLODE_START, TL.BLAST, t);
-    const flash = t < TL.BLAST ? 0.55 * Math.pow(smoothstep(TL.BLAST - 0.6, TL.BLAST, t), 2.4) : Math.exp(-tb * 3.4);
+    const flash = t < TL.BLAST ? 0.34 * Math.pow(smoothstep(TL.BLAST - 0.6, TL.BLAST, t), 2.4) : Math.exp(-tb * 3.4);
     const shutdown = smoothstep(TL.CONVERGE_END, TL.CONVERGE_END + 0.55, t);
 
     // ── construction wave sweeping the terrain
@@ -714,7 +714,7 @@ export class IntroScene {
     const seedGlow = smoothstep(0.3, 2.0, t);
     const coreI = after
       ? 0.3 + 70 * Math.exp(-tb * 3.2)
-      : 0.35 * seedGlow + 2.4 * charge + 13 * implode * implode;
+      : 0.3 * seedGlow + 1.5 * charge + 9 * implode * implode;
     (U.uCore.value as THREE.Vector4).w = coreI;
 
     const pulse = 1 + 0.06 * Math.sin(t * 6 * (1 + charge * 3));
@@ -725,13 +725,14 @@ export class IntroScene {
     this.orbMat.uniforms.uIntensity.value = 0.6 + 1.5 * charge + 4 * implode;
 
     // halos: inner tight, outer soft
-    const hk = after ? 4.5 * Math.exp(-tb * 3.0) + 0.05 : (0.32 + 1.5 * charge + 4 * implode * implode) * seedGlow;
+    // after the blast a low warm afterglow stays behind so the plaza never goes pitch black
+    const hk = after ? 2.2 * Math.exp(-tb * 2.0) + 0.14 : (0.28 + 0.85 * charge + 2.6 * implode * implode) * seedGlow;
     const hs = after
       ? 13 + 95 * Math.exp(-tb * 2.8)
-      : (2.5 + 13 * charge + 26 * implode * implode) * seedGlow + 0.01;
+      : (2.5 + 8 * charge + 16 * implode * implode) * seedGlow + 0.01;
     this.halos[0].scale.setScalar(hs);
     (this.halos[0].material as THREE.SpriteMaterial).color.setRGB(hk, 0.82 * hk, 0.5 * hk);
-    const hk2 = after ? 2.4 * Math.exp(-tb * 2.2) + 0.04 : (0.16 + 0.9 * charge + 1.8 * implode) * seedGlow;
+    const hk2 = after ? 1.5 * Math.exp(-tb * 1.2) + 0.10 : (0.14 + 0.42 * charge + 1.0 * implode) * seedGlow;
     const hs2 = after ? 40 + 170 * Math.exp(-tb * 2.2) : (13 + 52 * charge + 44 * implode) * seedGlow + 0.01;
     this.halos[1].scale.setScalar(hs2);
     (this.halos[1].material as THREE.SpriteMaterial).color.setRGB(hk2, 0.6 * hk2, 0.25 * hk2);
@@ -741,7 +742,7 @@ export class IntroScene {
     this.beam.scale.set(Math.max(beamR, 0.05), 190, Math.max(beamR, 0.05));
     this.beamMat.uniforms.uAmt.value = after
       ? 2.6 * Math.exp(-tb * 2.6)
-      : 0.35 * smoothstep(0.8, 3, t) + 0.85 * charge;
+      : 0.35 * smoothstep(0.8, 3, t) + 0.5 * charge;
     this.beam.visible = this.beamMat.uniforms.uAmt.value > 0.01;
 
     // ── detonation shells
@@ -868,11 +869,14 @@ export class IntroScene {
       this.emblem.group.visible = t > TL.FORM_START - 0.05;
       this.emblemMat.uniforms.uForm.value = smoothstep(TL.FORM_START, TL.SOLID, t);
       this.emblemMat.uniforms.uSweep.value = -0.25 + 1.5 * smoothstep(TL.SOLID + 0.05, TL.SOLID + 1.5, t);
+      const form = smoothstep(TL.FORM_START, TL.SOLID, t);
+      // the emblem is molten while it assembles, so it carries its own light: this
+      // is what fills the beat between the blast and the reveal
       this.emblemMat.uniforms.uGlow.value =
-        0.35 + 0.9 * smoothstep(TL.SOLID, TL.SOLID + 0.6, t) * (1 - 0.5 * smoothstep(TL.TAG_IN, TL.END, t));
+        (0.6 + 1.5 * form + 0.5 * solid) * (1 - 0.35 * smoothstep(TL.TAG_IN, TL.END, t));
       const auraPulse = 0.5 + 0.5 * Math.sin(t * 1.7);
-      this.emblemHalo.scale.setScalar(7.2 + 1.0 * auraPulse + 2 * (1 - solid));
-      (this.emblemHalo.material as THREE.MeshBasicMaterial).opacity = 0.16 * solid + 0.06;
+      this.emblemHalo.scale.setScalar(7.2 + 1.0 * auraPulse + 7 * (1 - form));
+      (this.emblemHalo.material as THREE.MeshBasicMaterial).opacity = 0.06 + 0.4 * form;
       this.emblemHalo.visible = t > TL.FORM_START;
     }
     if (this.logoPts) {
@@ -884,13 +888,13 @@ export class IntroScene {
     }
 
     // ── post
-    this.post.bloom.strength = 0.5 + 1.9 * flash + 0.4 * implode + 0.3 * charge + 0.1 * solid;
+    this.post.bloom.strength = 0.42 + 1.3 * flash + 0.32 * implode + 0.16 * charge + 0.1 * solid;
     this.post.bloom.radius = 0.6 + 0.25 * flash;
     this.post.bloom.threshold = 0.78 - 0.16 * flash;
 
     const fu = this.post.final.uniforms;
     fu.uTime.value = t;
-    fu.uFlash.value = flash * 0.85;
+    fu.uFlash.value = flash * 0.5;
     fu.uFade.value = fade;
     // the implode used to push aberration to ~1.3 and the thin edges shimmered
     fu.uAberr.value = (0.3 + 1.5 * flash + 0.28 * implode + 0.18 * charge) * (1 - 0.62 * solid);
