@@ -627,27 +627,41 @@ export function buildMonoliths(U: Uniforms, maxAnisotropy: number) {
 }
 
 // ───────────────────────── armillary rings around the core
+// Four hairline rings, each parked on its own plane. They never sit on the same
+// tilt: as the charge builds they swing onto one shared plane and read as a
+// single concentric circle with the core — the blast — in the middle of it.
 export function buildArmillary(material: THREE.ShaderMaterial) {
   const rng = mulberry32(5);
   const group = new THREE.Group();
   const rings: THREE.Mesh[] = [];
-  const radii = [9.6, 12.0, 14.4];
-  const tubes = [0.24, 0.16, 0.11];
-  for (let i = 0; i < 3; i++) {
-    const geo = new THREE.TorusGeometry(radii[i], tubes[i], 8, 220);
+  const radii = [7.6, 9.4, 11.2, 13.0];
+  const tubes = [0.075, 0.062, 0.052, 0.044];
+  // spreads of tilt: the two inner rings lean hard, the outer pair barely
+  const tilts: [number, number, number][] = [
+    [1.15, 0.5, 0.72],
+    [-0.95, 1.05, -0.55],
+    [0.42, -0.35, 0.28],
+    [-0.22, 0.6, -0.16],
+  ];
+  for (let i = 0; i < radii.length; i++) {
+    const geo = new THREE.TorusGeometry(radii[i], tubes[i], 6, 260);
     const mesh = new THREE.Mesh(geo, material);
-    mesh.rotation.set(Math.PI / 2 + (i - 1) * 0.42 + (rng() - 0.5) * 0.1, rng() * 0.9, (i - 1) * 0.5);
+    const [tx, ty, tz] = tilts[i];
+    mesh.quaternion.setFromEuler(new THREE.Euler(tx + (rng() - 0.5) * 0.08, ty, tz));
     mesh.position.y = CORE_Y;
     mesh.frustumCulled = false;
+    mesh.userData.base = mesh.quaternion.clone();
+    mesh.userData.spinDir = i % 2 === 0 ? 1 : -1;
+    mesh.userData.spinRate = 0.55 + i * 0.22;
     rings.push(mesh);
     group.add(mesh);
   }
   // a small "index" bead riding the outer ring, like a bezel marker
-  const beadGeo = new THREE.SphereGeometry(0.55, 16, 12);
+  const beadGeo = new THREE.SphereGeometry(0.36, 14, 10);
   const bead = new THREE.Mesh(beadGeo, material);
-  bead.position.set(radii[2], 0, 0);
+  bead.position.set(radii[radii.length - 1], 0, 0);
   bead.frustumCulled = false;
-  rings[2].add(bead);
+  rings[rings.length - 1].add(bead);
 
   return { group, rings, bead };
 }

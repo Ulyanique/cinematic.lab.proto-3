@@ -514,7 +514,7 @@ void main(){
   p.y = y - 3.0;
   float calm = smoothstep(0.0, 2.5, uBT);
   vA = smoothstep(0.0, 4.0, y) * (1.0 - smoothstep(h - 12.0, h, y))
-     * mix(0.45 + 0.55 * sin(uTime * (2.0 + s * 5.0) + s * 60.0), 0.5, calm)
+     * mix(0.60 + 0.40 * sin(uTime * (2.0 + s * 5.0) + s * 60.0), 0.66, calm)
      * mix(1.0, 0.4, calm);
   gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
   float size = 0.12 + s * 0.3;
@@ -876,7 +876,7 @@ void main(){
   float v = smoothstep(0.28, 1.05, length(ca * 1.22));
   m *= 1.0 - uVignette * v;
 
-  float g = h12(vUv * 1500.0 + fract(uTime) * 91.0) - 0.5;
+  float g = h12(vUv * 1500.0 + floor(uTime * 24.0) * 37.0) - 0.5;
   m += g * uGrain;
 
   m *= uFade;

@@ -5,6 +5,8 @@ import { buildArmillary, buildMonoliths, buildPillars, buildTerrain, type Monoli
 import { buildCompassEmblem } from "./logo3d";
 import { buildPost, type PostChain } from "./post";
 import { CameraRig } from "./camera";
+
+const AXIS_Z = new THREE.Vector3(0, 0, 1);
 import { SoundDesign } from "./audio";
 import {
   beamFrag,
@@ -109,6 +111,11 @@ export class IntroScene {
 
   private tmpV = new THREE.Vector3();
   private tmpV2 = new THREE.Vector3();
+  private ringSpin = [0, 0, 0, 0];
+  private tmpFace = new THREE.Quaternion();
+  private tmpSpin = new THREE.Quaternion();
+  private tmpDir = new THREE.Vector3();
+  private now = 0;
   private prevCam = new THREE.Vector3();
   private prevCamValid = false;
   private camSpeed = 0;
@@ -637,7 +644,10 @@ export class IntroScene {
     }
     // hysteresis: a drop needs a long, sustained stall, and we climb back only
     // once — a resolution flip-flop reads as the whole frame "breathing"
-    if (this.slowFrames > 120 && this.renderScale > 0.6 && this.scaleDrops < 2) {
+    if (this.now > 25.5) {
+      this.slowFrames = 0;
+      this.fastFrames = 0;
+    } else if (this.slowFrames > 120 && this.renderScale > 0.6 && this.scaleDrops < 2) {
       this.renderScale = Math.max(0.6, this.renderScale - 0.2);
       this.scaleDrops++;
       this.slowFrames = 0;
@@ -662,6 +672,7 @@ export class IntroScene {
 
   private update(t: number, dt: number) {
     const U = this.U;
+    this.now = t;
     const after = t >= TL.BLAST;
     const tb = t - TL.BLAST;
     U.uTime.value = t;
@@ -726,10 +737,10 @@ export class IntroScene {
     (this.halos[1].material as THREE.SpriteMaterial).color.setRGB(hk2, 0.6 * hk2, 0.25 * hk2);
 
     // beam of light into the sky
-    const beamR = 0.4 + 1.2 * charge - 0.85 * implode + (after ? 7 * Math.exp(-tb * 1.2) : 0);
+    const beamR = 0.4 + 1.2 * charge - 0.85 * implode + (after ? 2.6 * Math.exp(-tb * 2.4) : 0);
     this.beam.scale.set(Math.max(beamR, 0.05), 190, Math.max(beamR, 0.05));
     this.beamMat.uniforms.uAmt.value = after
-      ? 3.2 * Math.exp(-tb * 1.3)
+      ? 2.6 * Math.exp(-tb * 2.6)
       : 0.35 * smoothstep(0.8, 3, t) + 0.85 * charge;
     this.beam.visible = this.beamMat.uniforms.uAmt.value > 0.01;
 
@@ -741,8 +752,14 @@ export class IntroScene {
       this.shells[i].visible = vis;
       if (vis) {
         const speed = i === 0 ? 2.7 : 1.9;
-        this.shells[i].scale.setScalar(Math.max(0.01, 105 * (1 - Math.exp(-speed * tt))));
-        this.shellMats[i].uniforms.uAmt.value = (i === 0 ? 2.4 : 1.1) * Math.exp(-tt * (i === 0 ? 2.9 : 1.9));
+        const sc = Math.max(0.01, 105 * (1 - Math.exp(-speed * tt)));
+        this.shells[i].scale.setScalar(sc);
+        // fading by camera distance keeps the bubble readable from the outside and
+        // stops it from wrapping the lens in additive white as it grows past us
+        const camDist = this.camera.position.distanceTo(this.shells[i].position);
+        const outside = 1 - smoothstep(camDist * 0.5, camDist * 0.92, sc);
+        this.shellMats[i].uniforms.uAmt.value =
+          (i === 0 ? 2.4 : 1.1) * Math.exp(-tt * (i === 0 ? 3.1 : 2.1)) * outside;
       }
     }
     // ── ground rings
@@ -758,8 +775,13 @@ export class IntroScene {
       }
     }
 
+    // the dust settles while the blast assembles (it used to sparkle hard over the
+    // implosion) and only briefly surges afterwards
+    const emberCalm = after
+      ? 0.85 + 0.5 * Math.exp(-tb * 2.0)
+      : 1 - 0.62 * smoothstep(TL.IMPLODE_START - 0.9, TL.BLAST, t);
     this.emberMat.uniforms.uAmt.value =
-      smoothstep(1.6, 5, t) * (1 + 1.5 * smoothstep(TL.BLAST, TL.BLAST + 1, t)) * (1 - 0.62 * smoothstep(TL.BLAST + 3.0, TL.END, t));
+      smoothstep(1.6, 5, t) * emberCalm * (1 - 0.62 * smoothstep(TL.BLAST + 3.0, TL.END, t));
 
     // ── crystals
     const mono = U.uMono.value as THREE.Vector4[];
@@ -792,17 +814,35 @@ export class IntroScene {
       }
     }
 
-    // ── armillary: ceremonial rotation, blown open by the blast
+    // ── armillary: four rings hanging on four different planes. As the charge
+    //    builds they swing onto one plane that faces the lens, so right before the
+    //    blast they read as a single set of concentric circles with the core —
+    //    the detonation — dead in the middle of them.
     if (this.armillary) {
-      const spin = 0.06 + charge * 0.5 + implode * 1.4;
-      this.armillary.rings[0].rotation.z += dt * spin * 0.7;
-      this.armillary.rings[1].rotation.z -= dt * spin;
-      this.armillary.rings[2].rotation.z += dt * spin * 0.45;
-      this.armillaryMat.uniforms.uGlow.value = 0.5 + 0.7 * charge + 1.4 * implode + (after ? 2 * Math.exp(-tb * 2.2) : 0);
+      const align = smoothstep(TL.CONVERGE_END - 3.4, TL.BLAST - 0.15, t);
+      this.camera.getWorldDirection(this.tmpDir);
+      this.tmpFace.setFromUnitVectors(AXIS_Z, this.tmpDir.negate().normalize());
+      const spinRate = 0.1 + charge * 0.5 + implode * 2.0;
+      this.armillary.rings.forEach((ring, i) => {
+        const dir = (ring.userData.spinDir as number) ?? 1;
+        const rate = (ring.userData.spinRate as number) ?? 1;
+        this.ringSpin[i] += dt * spinRate * rate * dir;
+        this.tmpSpin.setFromAxisAngle(AXIS_Z, this.ringSpin[i]);
+        ring.quaternion
+          .copy(ring.userData.base as THREE.Quaternion)
+          .slerp(this.tmpFace, align)
+          .multiply(this.tmpSpin);
+        // they ride inward while they line up, so the circle tightens onto the core
+        ring.scale.setScalar(1 - 0.26 * align);
+      });
+      this.armillaryMat.uniforms.uGlow.value =
+        0.42 + 0.45 * charge + 0.8 * implode + (after ? 1.4 * Math.exp(-tb * 2.2) : 0);
       // get the rings out of the camera's way before the dive through them
-      const expand = after ? 2.2 + tb * 9 : 1 + 1.05 * smoothstep(TL.CONVERGE_END - 2.2, TL.IMPLODE_START, t);
+      const expand = after
+        ? 1.35 + tb * 15
+        : 1 + 0.9 * smoothstep(TL.CONVERGE_END - 2.2, TL.IMPLODE_START, t);
       this.armillary.group.scale.setScalar(expand);
-      this.armillary.group.visible = t > 2.2 && tb < 0.25;
+      this.armillary.group.visible = t > 2.2 && tb < 0.5;
     }
 
     // ── camera
@@ -852,9 +892,10 @@ export class IntroScene {
     fu.uTime.value = t;
     fu.uFlash.value = flash * 0.85;
     fu.uFade.value = fade;
-    fu.uAberr.value = (0.35 + 1.7 * flash + 0.9 * implode + 0.25 * charge) * (1 - 0.62 * solid);
+    // the implode used to push aberration to ~1.3 and the thin edges shimmered
+    fu.uAberr.value = (0.3 + 1.5 * flash + 0.28 * implode + 0.18 * charge) * (1 - 0.62 * solid);
     fu.uStreak.value =
-      smoothstep(1.4, 5, t) * (0.7 + 1.4 * flash + 0.5 * charge) * (1 - smoothstep(TL.BLAST + 0.7, TL.BLAST + 3.4, t));
+      smoothstep(1.4, 5, t) * (0.7 + 1.1 * flash + 0.35 * charge) * (1 - smoothstep(TL.BLAST + 0.7, TL.BLAST + 3.4, t));
     fu.uGrain.value = (0.018 + 0.012 * flash) * (1 - 0.45 * solid);
     fu.uVignette.value = 0.5 + 0.18 * solid;
 
