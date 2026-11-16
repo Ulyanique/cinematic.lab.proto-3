@@ -66,27 +66,29 @@ vec3 goldShade(vec3 N, vec3 V, vec3 wpos, float seed){
   vec3 R = reflect(-V, N);
   float ndv = clamp(dot(N, V), 0.0, 1.0);
   vec3 F0 = vec3(1.0, 0.70, 0.235);
-  vec3 F = F0 + (1.0 - F0) * pow(1.0 - ndv, 5.0) * 0.34;
+  // a hot Fresnel rim is what makes gold read as metal on a big flat facet
+  vec3 F = F0 + (1.0 - F0) * pow(1.0 - ndv, 4.0) * 0.9;
 
-  vec3 col = envColor(R) * F * 0.72;
+  vec3 col = envColor(R) * F * 0.46;
 
-  // brushed micro-structure
-  float brush = 0.68 + 0.62 * fract(seed * 7.31);
+  // brushed micro-structure + a slow vertical gradient, so a facet is never one tone
+  float brush = 0.55 + 0.85 * fract(seed * 7.31);
   float streak = smoothstep(0.35, 1.0, sin(wpos.y * 9.0 + seed * 61.0) * 0.5 + 0.5);
-  col *= brush * (0.94 + 0.10 * streak);
+  col *= brush * (0.92 + 0.16 * streak);
+  col *= mix(0.55, 1.15, clamp((wpos.y + 2.0) / 22.0, 0.0, 1.0));
 
-  // key light = the energy core
+  // key light = the energy core; the specular is the signature of polished gold
   vec3 Lc = uCore.xyz - wpos;
   float dl = length(Lc);
   vec3 L = Lc / max(dl, 0.001);
-  float att = uCore.w / (1.0 + dl * dl * 0.0025);
+  float att = uCore.w / (1.0 + dl * dl * 0.0016);
   float diff = max(dot(N, L), 0.0);
-  float spec = pow(max(dot(R, L), 0.0), 26.0);
-  float wide = pow(max(dot(R, L), 0.0), 3.0) * 0.12;
-  col += (F0 * diff * 0.45 + vec3(1.0, 0.76, 0.40) * (spec * 1.7 + wide)) * att;
+  float spec = pow(max(dot(R, L), 0.0), 40.0);
+  float wide = pow(max(dot(R, L), 0.0), 4.0) * 0.16;
+  col += (F0 * diff * 0.30 + vec3(1.0, 0.84, 0.52) * (spec * 4.2 + wide)) * att * 1.35;
 
-  // hemisphere bounce keeps the dark sides alive
-  col += F0 * vec3(0.55, 0.33, 0.12) * 0.055 * (0.5 + 0.5 * N.y);
+  // hemisphere bounce keeps the dark sides alive, but only just
+  col += F0 * vec3(0.5, 0.3, 0.11) * 0.03 * (0.5 + 0.5 * N.y);
   return col;
 }
 
@@ -206,7 +208,7 @@ void main(){
   vec3 col = goldShade(N, V, vWPos, vSeed);
   float ao;
   vec3 pool = pools(vWPos, ao);
-  col = col * mix(1.0, ao, 0.55) + pool * vec3(0.48, 0.35, 0.19) * ao;
+  col = col * mix(1.0, ao, 0.6) + pool * vec3(0.42, 0.29, 0.15) * ao * 0.55;
 
   float dist = length(vWPos.xz);
   float pulse = pow(0.5 + 0.5 * sin(dist * 0.07 - uTime * 1.8), 8.0);
@@ -232,12 +234,12 @@ void main(){
   #ifdef MONO
     float hn = clamp(vLocal.y / uHeight, 0.0, 1.0);
     float rim = pow(1.0 - ndv, 1.5);
-    vec3 glow = vec3(1.0, 0.62, 0.18) * (pow(1.0 - hn, 2.0) * 1.0 + smoothstep(0.55, 1.0, hn) * 0.7);
-    col += glow * (0.18 + 0.8 * rim + 0.3 * fract(vSeed * 5.1)) * (0.7 + 0.9 * uCharge);
+    vec3 glow = vec3(1.0, 0.58, 0.14) * (pow(1.0 - hn, 2.5) * 0.55 + smoothstep(0.6, 1.0, hn) * 0.5);
+    col += glow * (0.05 + 0.55 * rim + 0.10 * fract(vSeed * 5.1)) * (0.7 + 0.7 * uCharge);
     // the glowing "cut line" while the crystal grows out of the ground
     float band = smoothstep(cut - 2.0, cut, vLocal.y) * (1.0 - smoothstep(cut, cut + 0.35, vLocal.y));
     col += vec3(1.0, 0.86, 0.55) * band * 7.0;
-    eI = 1.15 + pulse * 1.0 + uCharge * 1.8 + band * 6.0;
+    eI = 0.5 + pulse * 0.45 + uCharge * 0.8 + band * 6.0;
     eI *= smoothstep(0.0, 0.45, fract(vSeed * 11.1));
   #endif
 
@@ -857,11 +859,11 @@ void main(){
 
   col += uFlash * vec3(1.0, 0.9, 0.66) * (1.35 - length(c) * 0.9);
 
-  vec3 m = aces(col * 0.80);
+  vec3 m = aces(col * 0.72);
 
   // Gold grade (linear). Lemon (224,196,106) lands on amber gold (~207,166,60)
   // while the white-hot core keeps a warm edge instead of going pure white.
-  m *= vec3(0.88, 0.52, 0.24);
+  m *= vec3(1.0, 0.68, 0.36);
 
   // gentle S-curve + a real black point — the haze was lifting everything into milk
   m = m * m * (3.0 - 2.0 * m) * 0.38 + m * 0.62;
@@ -869,7 +871,7 @@ void main(){
 
   // gold reads as gold only when it is saturated; the old grade washed it out
   float luma = dot(m, vec3(0.2126, 0.7152, 0.0722));
-  m = clamp(mix(vec3(luma), m, 1.18), 0.0, 1.0);
+  m = clamp(mix(vec3(luma), m, 1.06), 0.0, 1.0);
 
   m = pow(m, vec3(0.95, 1.0, 1.08));
 
