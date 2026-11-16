@@ -97,7 +97,7 @@ export default function App() {
       }
       // a soft pool of darkness behind the emblem so the gold separates from the plaza
       if (shadeRef.current) {
-        shadeRef.current.style.opacity = String(0.6 * smoothstep(TL.BLAST + 1.0, TL.SOLID + 0.4, t));
+        shadeRef.current.style.opacity = String(0.75 * smoothstep(TL.BLAST + 0.8, TL.SOLID + 0.2, t));
       }
     };
 

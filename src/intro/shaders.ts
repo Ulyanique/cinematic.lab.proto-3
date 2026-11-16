@@ -868,8 +868,8 @@ void main(){
   m *= vec3(1.0, 0.93, 0.82);
 
   // gentle S-curve + a real black point — the haze was lifting everything into milk
-  m = m * m * (3.0 - 2.0 * m) * 0.38 + m * 0.62;
-  m = clamp(max(m - 0.014, 0.0) / 0.986, 0.0, 1.0);
+  m = m * m * (3.0 - 2.0 * m) * 0.5 + m * 0.5;
+  m = clamp(max(m - 0.018, 0.0) / 0.982, 0.0, 1.0);
 
   // gold reads as gold only when it is saturated; the old grade washed it out
   float luma = dot(m, vec3(0.2126, 0.7152, 0.0722));
